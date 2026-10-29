@@ -1,0 +1,4 @@
+project_id = "daily-ledger"
+
+[functions.ledger-ai-import]
+verify_jwt = true

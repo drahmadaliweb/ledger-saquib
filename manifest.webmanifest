@@ -1,0 +1,11 @@
+{
+  "name": "Daily Ledger",
+  "short_name": "Ledger",
+  "description": "Private personal finance tracker",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f5f2",
+  "theme_color": "#245746",
+  "icons": [{ "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
