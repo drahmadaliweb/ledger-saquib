@@ -94,6 +94,9 @@
   .controls .search svg{position:absolute; left:10px; top:50%; transform:translateY(-50%); width:15px; height:15px; color:var(--muted)}
   .controls select{flex:0 0 auto; width:auto; min-width:115px}
   .filtered-line{margin-top:12px; font-size:13px; color:var(--muted); display:flex; gap:12px; align-items:center; flex-wrap:wrap}
+  .filter-chip-list{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:4px}
+  .filter-chip{display:inline-flex;align-items:center;padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:var(--emerald-soft);color:var(--emerald-deep);font-size:11px;line-height:1.35}
+
   .filtered-line b{color:var(--ink); font-family:"Space Grotesk",sans-serif; font-variant-numeric:tabular-nums}
 
   .table-scroll{overflow-x:auto}
@@ -696,10 +699,18 @@ function detailRow(r){
 function renderTable(){
   const list=getFiltered(); $("rows").innerHTML=list.map(rowMarkup).join(""); $("emptyState").style.display=list.length?"none":"block";
   const spend=list.filter(r=>r.kind==="expense"&&!r.forPerson).reduce((s,r)=>s+netAmtUSD(r),0);
-  const explicitMonth=$("fltMonth").value;
-  const scope=explicitMonth?monthOf(explicitMonth+"-01"):(showAll?"all time":monthOf(currentMonthKey()+"-01"));
-  $("filteredText").innerHTML=`Showing <b>${list.length}</b> entr${list.length===1?"y":"ies"} (${escapeHtml(scope)}) · spending <b>${fmt(spend)}</b>`;
-  const btn=$("showAllBtn"); btn.textContent=showAll?"Show this month":"Show all"; btn.style.display=explicitMonth?"none":"inline-block";
+  const explicitMonth=$("fltMonth").value,from=$("fromDate")?.value||"",to=$("toDate")?.value||"";
+  const scope=from||to?`${from||"Any date"} to ${to||"Any date"}`:explicitMonth?monthOf(explicitMonth+"-01"):(showAll?"all time":monthOf(currentMonthKey()+"-01"));
+  const active=[];
+  if($("search").value.trim())active.push(`Search: ${$("search").value.trim()}`);
+  if($("fltKind").value)active.push(`Type: ${$("fltKind").selectedOptions[0]?.textContent||$("fltKind").value}`);
+  if(from||to)active.push(`Dates: ${from||"Any"} – ${to||"Any"}`);
+  else if(explicitMonth)active.push(`Month: ${monthOf(explicitMonth+"-01")}`);
+  if($("fltCat").value)active.push(`Category: ${$("fltCat").selectedOptions[0]?.textContent||$("fltCat").value}`);
+  if($("fltAcct").value)active.push(`Account: ${$("fltAcct").selectedOptions[0]?.textContent||$("fltAcct").value}`);
+  const chips=active.length?` <span class="filter-chip-list" aria-label="Active filters">${active.map(x=>`<span class="filter-chip">${escapeHtml(x)}</span>`).join("")}</span>`:"";
+  $("filteredText").innerHTML=`Showing <b>${list.length}</b> entr${list.length===1?"y":"ies"} (${escapeHtml(scope)})${chips} · spending <b>${fmt(spend)}</b>`;
+  const btn=$("showAllBtn"); btn.textContent=showAll?"Show this month":"Show all"; btn.style.display=explicitMonth||from||to?"none":"inline-block";
 }
 
 /* ---- breakdowns ---- */
@@ -1289,7 +1300,7 @@ function setupUpgrade(){
  $('transferForm').onsubmit=e=>{e.preventDefault();const src=$('transferFrom').value,p=$('transferTo').value;if(src===p)return toast('Choose different accounts.');checkpoint();const t={id:uid(),kind:'transfer',c:'Transfer',t:'Account transfer',d:$('transferDate').value,src,p,a:Number($('transferReceived').value),srcAmt:Number($('transferSent').value),cur:curOfAcct(p),bal:true};data.push(t);applyTx(t,1);save();refreshLists();renderAll();toast('Transfer recorded.');};
  $('reconcileForm').onsubmit=e=>{e.preventDefault();checkpoint();const a=accByName($('reconcileAccount').value);extra.audit.push({date:localDay(),account:a.name,cur:a.cur,before:a.balance,after:Number($('reconcileAmount').value),note:$('reconcileNote').value});a.balance=Number($('reconcileAmount').value);save();renderAll();toast('Adjustment saved.');};
  const controls=$('search').closest('.controls');controls.insertAdjacentHTML('afterend',`<div class="controls" style="margin-top:12px">${field('From date','<input type="date" id="fromDate">')}${field('To date','<input type="date" id="toDate">')}${btn('Excel · this view','exportExcel(true)')}</div>`);
- const oldFiltered=getFiltered;getFiltered=function(){return oldFiltered().filter(t=>(!$('fromDate').value||t.d>=$('fromDate').value)&&(!$('toDate').value||t.d<=$('toDate').value));};['fromDate','toDate'].forEach(id=>$(id).onchange=renderTable);$('clearFlt').addEventListener('click',()=>{$('fromDate').value='';$('toDate').value='';renderTable();});
+ const oldFiltered=getFiltered;getFiltered=function(){return oldFiltered().filter(t=>(!$('fromDate').value||t.d>=$('fromDate').value)&&(!$('toDate').value||t.d<=$('toDate').value));};['fromDate','toDate'].forEach(id=>$(id).onchange=()=>{if($('fromDate').value||$('toDate').value){showAll=true;$('fltMonth').value='';}renderTable();});$('clearFlt').addEventListener('click',()=>{$('fromDate').value='';$('toDate').value='';showAll=false;renderTable();});
  $('e-details').setAttribute('list','merchantList');document.body.insertAdjacentHTML('beforeend','<datalist id="merchantList"></datalist>');$('merchantList').innerHTML=[...new Set(data.filter(t=>t.kind==='expense').map(t=>t.t))].map(t=>`<option value="${escapeHtml(t)}">`).join('');$('e-details').addEventListener('change',()=>{const t=data.slice().reverse().find(t=>t.kind==='expense'&&t.t.toLowerCase()===$('e-details').value.toLowerCase());if(t){$('e-cat').value=t.c;$('e-acct').value=t.p;updateFormSyms();}});
  document.querySelectorAll('.btn-primary').forEach(b=>b.addEventListener('click',()=>{if(b.id!=='commitImport')checkpoint();},{capture:true}));
  $('grp-expense').insertAdjacentHTML('beforeend',`<details class="wide"><summary>Split this expense across categories</summary><p class="acct-meta">Enter one category and amount per line, separated by a comma. Total must match the amount above. Leave empty for a normal expense. Not available for purchases on behalf of another person.</p><textarea id="splitLines" placeholder="Grocery, 65&#10;Home, 35" rows="3"></textarea></details>`);
