@@ -369,7 +369,6 @@ body{background:#f2f4f0}.wrap{max-width:1320px;padding:32px 28px 80px}header.top
   <div class="view" id="view-accounts">
     <div class="stats" id="netStrip"></div>
     <section class="card"><div class="card-h"><h2>Accounts &amp; assets</h2><button class="btn-ghost" id="addAcctBtn">+ Add account</button></div><div class="card-b" id="acctList"></div></section>
-    <section class="card"><div class="card-h"><h2>Reward points</h2></div><div class="card-b" id="rewardsList"></div></section>
     <section class="card"><div class="card-h"><h2>Currencies &amp; rates</h2><button class="btn-ghost" id="addCurBtn">+ Add currency</button></div><div class="card-b" id="curList"></div></section>
   </div>
 
@@ -428,7 +427,7 @@ body{background:#f2f4f0}.wrap{max-width:1320px;padding:32px 28px 80px}header.top
 <div class="modal-bg" id="accountDetailsModal"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="accountDetailsTitle">
   <h2 id="accountDetailsTitle">Account details</h2>
   <div id="accountDetailsBody"></div>
-  <div class="modal-actions"><button class="btn-ghost left" id="accountDetailsHistory">History</button><button class="btn-ghost" id="accountDetailsClose">Close</button><button class="btn-primary" id="accountDetailsEdit">Edit</button></div>
+  <div class="modal-actions"><button class="btn-ghost left" id="accountDetailsHistory">History</button><button class="btn-primary" id="accountDetailsRedeem" hidden>Redeem Points</button><button class="btn-ghost" id="accountDetailsClose">Close</button><button class="btn-primary" id="accountDetailsEdit">Edit</button></div>
 </div></div>
 
 <!-- loan item modal -->
@@ -722,11 +721,6 @@ function renderAccounts(){
     `<div class="acct-group"><h3>Assets</h3><div class="acct-grid">${assetAccts().map(assetRow).join("")}</div>${loanBlock("owed")}</div>`+
     `<div class="acct-group" style="margin-top:18px"><h3>Credit cards &amp; loans</h3><div class="acct-grid">${creditAccts().map(cardRow).join("")}</div>${loanBlock("owe")}</div>`;
 
-  const cards=creditAccts();
-  $("rewardsList").innerHTML=cards.length
-    ? cards.slice().sort((a,b)=>b.rewards-a.rewards).map(a=>`<div class="acct-row"><div class="acct-main"><div class="acct-name">${escapeHtml(a.name)}</div><div class="acct-meta">${Math.round(a.rewards).toLocaleString()} pts available</div></div><div class="acct-actions"><button class="btn-ghost" data-redeem="${a.id}" style="padding:6px 13px" ${a.rewards<=0?"disabled":""}>Redeem</button></div></div>`).join("")
-    : '<div class="acct-meta">Add a credit card to start tracking points.</div>';
-
   $("curList").innerHTML=currencies.map(c=> c.code==="USD"
     ? `<div class="acct-row"><div class="acct-main"><div class="acct-name">USD ${c.symbol}</div><div class="acct-meta">Base currency · net worth is shown in USD</div></div></div>`
     : `<div class="acct-row"><div class="acct-main"><div class="acct-name">${escapeHtml(c.code)} ${escapeHtml(c.symbol)}</div><div class="acct-meta">1 USD = <input type="number" data-rate="${escapeHtml(c.code)}" value="${c.perUSD}" step="0.0001" style="width:120px;display:inline-block;padding:4px 8px;margin:2px 0"> ${escapeHtml(c.code)}</div></div></div>`
@@ -909,6 +903,7 @@ function openAccountDetails(id){
   detailAcctId=id;
   const recent=data.filter(r=>r.p===a.name||r.src===a.name).sort((x,y)=>(y.d||"").localeCompare(x.d||"")).slice(0,5);
   const isCredit=a.type==="credit";
+  $("accountDetailsRedeem").hidden=!isCredit; $("accountDetailsRedeem").disabled=!isCredit||Number(a.rewards||0)<=0;
   const stats=[
     {k:isCredit?"Balance owed":"Current balance",v:money(a.balance,a.cur),neg:isCredit&&a.balance>0||!isCredit&&a.balance<0},
     {k:"Account type",v:TYPE_LABEL[a.type]||a.type},
@@ -1122,7 +1117,7 @@ function bind(){
   $("accountDetailsModal").addEventListener("click",e=>{if(e.target===$("accountDetailsModal"))closeAccountDetails();});
   $("accountDetailsEdit").addEventListener("click",()=>{const id=detailAcctId;closeAccountDetails();if(id)openAcct(id);});
   $("accountDetailsHistory").addEventListener("click",()=>{const id=detailAcctId;closeAccountDetails();if(id)openHistory(id);});
-  $("rewardsList").addEventListener("click",e=>{ const b=e.target.closest("[data-redeem]"); if(b)openRedeem(b.dataset.redeem,null); });
+  $("accountDetailsRedeem").addEventListener("click",()=>{const id=detailAcctId;closeAccountDetails();if(id)openRedeem(id,null);});
   $("curList").addEventListener("change",e=>{ const inp=e.target.closest("[data-rate]"); if(inp){ const c=curObj(inp.dataset.rate); const v=parseFloat(inp.value); if(!isNaN(v)&&v>0){ c.perUSD=v; save(); renderAll(); } } });
   $("addCurBtn").addEventListener("click",()=>{ if(addCurrency()){ refreshLists(); renderAll(); } });
 
