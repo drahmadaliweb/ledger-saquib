@@ -118,22 +118,33 @@
     try { return JSON.parse(localStorage.getItem(stateKey) || 'null'); }
     catch { return null; }
   }
-  function attachLocalImages(state, local) {
-    if (!state || !local) return state;
-    const oldRows = new Map((local.data || []).map(row => [row.id, row]));
-    state.data = (state.data || []).map(row => {
-      const previous = oldRows.get(row.id);
-      return previous?.receipts?.length ? { ...row, receipts: previous.receipts } : row;
-    });
-    state.extra ||= {};
-    if (local.extra?.aiReceipts) state.extra.aiReceipts = local.extra.aiReceipts;
+  function discardAIImportImages(state) {
+    if (!state || typeof state !== 'object') return state;
+    (state.data || []).forEach(row => { if (row && typeof row === 'object') delete row.aiReceiptIds; });
+    if (state.extra && typeof state.extra === 'object') delete state.extra.aiReceipts;
     return state;
   }
+  function attachLocalImages(state, local) {
+    if (!state) return state;
+    if (local) {
+      const oldRows = new Map((local.data || []).map(row => [row.id, row]));
+      state.data = (state.data || []).map(row => {
+        const previous = oldRows.get(row.id);
+        return previous?.receipts?.length ? { ...row, receipts: previous.receipts } : row;
+      });
+    }
+    return discardAIImportImages(state);
+  }
+  // AI image data is excluded before snapshot serialization.
   function cloudCopy(value) {
-    const copy = JSON.parse(JSON.stringify(value));
-    (copy.data || []).forEach(row => { delete row.receipts; });
-    if (copy.extra) delete copy.extra.aiReceipts;
-    return copy;
+    const data = (value.data || []).map(row => {
+      const { receipts, aiReceiptIds, ...transaction } = row;
+      return transaction;
+    });
+    const extra = value.extra ? { ...value.extra } : undefined;
+    if (extra) delete extra.aiReceipts;
+    const copy = { ...value, data, ...(extra ? { extra } : {}) };
+    return JSON.parse(JSON.stringify(copy));
   }
   function currentUserState() {
     return localState() || {
@@ -274,6 +285,7 @@
   async function openLedger() {
     await identify();
     const savedLocal = localState();
+    if (savedLocal) { discardAIImportImages(savedLocal); setState(savedLocal); }
     const row = await cloudRow();
     if (row) {
       version = Number(row.version) || 1;
