@@ -6,7 +6,8 @@
     key: String(window.LEDGER_SUPABASE_KEY || '')
   };
   const sessionKey = 'dailyLedgerSupabaseSession_v1';
-  const stateKey = window.__LEDGER_KEY || 'dailyLedger2026_v3';
+  const baseStateKey = window.__LEDGER_KEY || 'dailyLedger2026_v3';
+  let stateKey = baseStateKey;
   const API = '/rest/v1/ledger_snapshots';
   let session = null;
   let user = null;
@@ -104,6 +105,8 @@
     await freshToken();
     const result = await request('/auth/v1/user');
     user = result;
+    // Keep each account's browser cache separate on shared devices.
+    stateKey = `${baseStateKey}::user:${result.id}`;
     return result;
   }
   async function cloudRow() {
@@ -163,30 +166,27 @@
         <label>Password<input id="ledgerPassword" type="password" autocomplete="current-password" required minlength="8"></label>
         <div class="ledger-auth-actions">
           <button id="ledgerSignIn" class="btn-primary">Sign in</button>
-          <button id="ledgerSignUp" class="btn-ghost">Create account</button>
         </div>
-        <p class="ledger-auth-foot">First sign-in? After the ledger opens, restore your JSON backup under <b>Data &amp; settings</b>. That uploads it to your private cloud ledger.</p>
+        <p class="ledger-auth-foot">This is a private ledger. The owner creates accounts and sends invitations. Each account has its own separate ledger.</p>
         <p class="ledger-auth-config" ${validConfig() ? 'hidden' : ''}>Set your Supabase Project URL and publishable/anon key in <code>supabase-config.js</code> before publishing.</p>
       </section>`;
     document.body.appendChild(gate);
-    $('ledgerSignIn').onclick = () => signIn(false);
-    $('ledgerSignUp').onclick = () => signIn(true);
+    $('ledgerSignIn').onclick = signIn;
   }
   function escapeText(value) {
     return String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
-  async function signIn(create) {
+  async function signIn() {
     if (!validConfig()) return authView('Add your Supabase URL and public key to supabase-config.js, then reload this page.');
     const email = $('ledgerEmail')?.value.trim();
     const password = $('ledgerPassword')?.value || '';
     if (!email || password.length < 8) return authView('Enter your email and a password with at least 8 characters.');
-    const gate = $('ledgerAuthGate');
-    const button = create ? $('ledgerSignUp') : $('ledgerSignIn');
+    const button = $('ledgerSignIn');
     button.disabled = true;
     try {
-      const payload = await authRequest(create ? '/auth/v1/signup' : '/auth/v1/token?grant_type=password', { email, password });
+      const payload = await authRequest('/auth/v1/token?grant_type=password', { email, password });
       if (!payload.access_token) {
-        authView('Check your email to confirm the account, then sign in here.');
+        authView('Accept the account invitation first, then sign in here.');
         return;
       }
       sessionWrite({ ...payload, expires_at: Math.floor(Date.now() / 1000) + (payload.expires_in || 3600) });
@@ -298,11 +298,12 @@
   function installSaveHook() {
     const store = window.__ledgerStore;
     if (!store || store.__cloudHooked) return;
-    const original = store.write.bind(store);
+    store.read = () => localState();
     store.write = value => {
-      const saved = original(value);
-      if (saved && user) queueWrite(value);
-      return saved;
+      try { setState(value); }
+      catch { return false; }
+      if (user) queueWrite(value);
+      return true;
     };
     store.__cloudHooked = true;
   }
