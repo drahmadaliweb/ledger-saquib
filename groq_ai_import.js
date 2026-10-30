@@ -20,11 +20,11 @@ const style=document.createElement('style');style.textContent=`.ai-notice{backgr
 document.head.appendChild(style);
 function syncAccounts(){const old=el('aiDefaultAccount').value;el('aiDefaultAccount').innerHTML=acctOptions(old);}
 syncAccounts();
-+// AI_POINT_MULTIPLIER_PATCH: keep this preference on this device; imported transactions store their own multiplier.
-+const savedAiMultiplier=Number(localStorage.getItem('dailyLedgerAiDefaultMultiplier'));if(Number.isFinite(savedAiMultiplier)&&savedAiMultiplier>=0)el('aiDefaultMult').value=String(savedAiMultiplier);
-+el('aiDefaultMult').onchange=()=>{const value=Number(el('aiDefaultMult').value);if(Number.isFinite(value)&&value>=0&&Math.abs(value*2-Math.round(value*2))<1e-8)localStorage.setItem('dailyLedgerAiDefaultMultiplier',String(value));};
-+const currentAiMultiplier=()=>{const value=Number(el('aiDefaultMult').value);return Number.isFinite(value)&&value>=0?value:1;};
-+const refresh=refreshLists;refreshLists=function(){refresh();syncAccounts();};
+// AI_POINT_MULTIPLIER_PATCH: keep this preference on this device; imported transactions store their own multiplier.
+const savedAiMultiplierRaw=localStorage.getItem('dailyLedgerAiDefaultMultiplier');if(savedAiMultiplierRaw!==null&&savedAiMultiplierRaw!==''){const savedAiMultiplier=Number(savedAiMultiplierRaw);if(Number.isFinite(savedAiMultiplier)&&savedAiMultiplier>=0)el('aiDefaultMult').value=String(savedAiMultiplier);}
+el('aiDefaultMult').onchange=()=>{const value=Number(el('aiDefaultMult').value);if(Number.isFinite(value)&&value>=0&&Math.abs(value*2-Math.round(value*2))<1e-8)localStorage.setItem('dailyLedgerAiDefaultMultiplier',String(value));};
+const currentAiMultiplier=()=>{const value=Number(el('aiDefaultMult').value);return Number.isFinite(value)&&value>=0?value:1;};
+const refresh=refreshLists;refreshLists=function(){refresh();syncAccounts();};
 async function api(path,body){if(!window.LedgerCloud?.invoke)throw Error('Sign in and configure the Supabase AI function first.');const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),115000);try{return await Promise.race([window.LedgerCloud.invoke(path==='/api/models'?'models':'analyze',body||{}),new Promise((_,reject)=>controller.signal.addEventListener('abort',()=>reject(Error('Analysis timed out. Wait for the server to finish before retrying.')),{once:true}))]);}finally{clearTimeout(timer);}}
 el('aiConnection').textContent='Groq AI runs through your signed-in Supabase Edge Function. The Groq API key is stored server-side; selected images and extraction context are sent to Groq for analysis.';
 el('aiLoadModels').onclick=async()=>{el('aiLoadModels').disabled=true;try{const result=await api('/api/models');el('aiModel').innerHTML='<option value="">Choose a model with image + JSON support</option>'+result.models.map(m=>`<option value="${esc(m.id)}">${esc(m.id)}</option>`).join('');if(result.models.length===1)el('aiModel').value=result.models[0].id;el('aiProgress').textContent=result.models.length?'Groq vision model ready. Review your quota before analyzing.':'No supported Groq vision model is available to this key. Check model permissions in Groq Console.';}catch(e){el('aiProgress').textContent=e.message;}finally{el('aiLoadModels').disabled=false;}};

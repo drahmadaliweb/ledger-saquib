@@ -1,5 +1,5 @@
-const CACHE = 'daily-ledger-shell-v8';
-const FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg', './supabase-config.js', './cloud.js', './groq_ai_import.js', './report_builder.js'];
+const CACHE = 'daily-ledger-shell-v9';
+const FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg', './supabase-config.js', './cloud.js', './groq_ai_import.js', './report_builder.js', './modernize_portal.js'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
 });
