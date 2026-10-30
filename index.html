@@ -140,6 +140,27 @@
 
   .acct-group h3{font-family:"Space Grotesk",sans-serif; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:6px 0 10px; font-weight:600}
   .acct-row,.loan-row{display:flex; align-items:center; gap:14px; padding:13px 0; border-bottom:1px solid var(--line)}
+  /* Responsive account cards */
+  .acct-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:12px}
+  .acct-card{display:flex;flex-direction:column;align-items:stretch;gap:12px;min-width:0;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);transition:border-color .16s,box-shadow .16s,transform .16s;cursor:pointer}
+  .acct-card:hover,.acct-card.selected{border-color:var(--emerald);box-shadow:0 4px 14px rgba(25,33,31,.08);transform:translateY(-1px)}
+  .acct-card:focus-visible{outline:3px solid color-mix(in srgb,var(--emerald) 35%,transparent);outline-offset:2px}
+  .acct-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .acct-card .acct-name{overflow-wrap:anywhere}
+  .acct-card .acct-bal{text-align:left;font-size:20px}
+  .acct-card-action{display:flex;justify-content:flex-end;padding-top:10px;border-top:1px solid var(--line)}
+  .acct-card-action[hidden]{display:none}
+  .acct-detail-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:14px 0 20px}
+  .acct-detail-stat{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+  .acct-detail-stat .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .acct-detail-stat .v{margin-top:5px;font-weight:600;font-family:"Space Grotesk",sans-serif;overflow-wrap:anywhere}
+  .acct-recent{display:grid;gap:8px}
+  .acct-recent-row{display:grid;grid-template-columns:minmax(74px,auto) minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .acct-recent-row:last-child{border-bottom:0}
+  .acct-recent-date,.acct-recent-category{font-size:12px;color:var(--muted)}
+  .acct-recent-description{min-width:0;overflow-wrap:anywhere}
+  @media(max-width:600px){.acct-grid{grid-template-columns:1fr}.acct-recent-row{grid-template-columns:1fr auto}.acct-recent-date{grid-column:1/-1}}
+
   .acct-row:last-child{border-bottom:none}
   .loan-row{cursor:pointer; border-bottom:1px solid var(--line)}
   .acct-main{flex:1; min-width:0}
@@ -403,6 +424,11 @@ body{background:#f2f4f0}.wrap{max-width:1320px;padding:32px 28px 80px}header.top
   <div class="field"><label for="a-bal" id="a-bal-label">Current balance</label><div class="amount-in"><span class="cur-prefix" id="a-bal-sym">$</span><input type="number" id="a-bal" step="0.01" value="0"></div></div>
   <div class="field" id="a-rewards-field"><label for="a-rewards">Reward points</label><input type="number" id="a-rewards" step="1" value="0"></div>
   <div class="modal-actions"><button class="btn-ghost left danger" id="acctDelete" style="border-color:var(--danger-soft); color:var(--danger)">Delete</button><button class="btn-ghost" id="acctCancel">Cancel</button><button class="btn-primary" id="acctSave">Save</button></div>
+</div></div>
+<div class="modal-bg" id="accountDetailsModal"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="accountDetailsTitle">
+  <h2 id="accountDetailsTitle">Account details</h2>
+  <div id="accountDetailsBody"></div>
+  <div class="modal-actions"><button class="btn-ghost left" id="accountDetailsHistory">History</button><button class="btn-ghost" id="accountDetailsClose">Close</button><button class="btn-primary" id="accountDetailsEdit">Edit</button></div>
 </div></div>
 
 <!-- loan item modal -->
@@ -688,12 +714,13 @@ function renderAccounts(){
   $("netStrip").innerHTML=[{k:"Total assets",v:fmt(p.assets)},{k:"Total debt",v:fmt(p.debt),neg:p.debt>0},{k:"Net worth",v:fmt(p.net),neg:p.net<0}]
     .map(c=>`<div class="stat"><div class="k">${c.k}</div><div class="v ${c.neg?'neg':''}">${c.v}</div></div>`).join("");
 
-  const assetRow=a=>`<div class="acct-row"><div class="acct-main"><div class="acct-name">${escapeHtml(a.name)}</div><div class="acct-meta"><span class="badge">${TYPE_LABEL[a.type]}</span> ${a.cur!=="USD"?`· ${a.cur} · ≈ ${fmt(toUSD(a.balance,a.cur))}`:""}</div></div><div class="acct-bal ${a.balance<0?'neg':''}">${money(a.balance,a.cur)}</div><div class="acct-actions"><button class="icon-btn" data-history="${a.id}" title="History">${HIST_SVG}</button><button class="icon-btn" data-acct="${a.id}" title="Edit balance">${EDIT_SVG}</button></div></div>`;
-  const cardRow=a=>`<div class="acct-row"><div class="acct-main"><div class="acct-name">${escapeHtml(a.name)}</div><div class="acct-meta"><span class="badge">Credit card</span>${a.cur!=="USD"?` · ${a.cur}`:""} ${a.rewards?`· ${Math.round(a.rewards).toLocaleString()} pts`:""}</div></div><div class="acct-bal ${a.balance>0?'owe':''}">${a.balance>0?"owe ":""}${money(a.balance,a.cur)}</div><div class="acct-actions"><button class="icon-btn" data-history="${a.id}" title="History">${HIST_SVG}</button><button class="icon-btn" data-acct="${a.id}" title="Edit">${EDIT_SVG}</button></div></div>`;
+  const accountCard=(a,credit=false)=>`<article class="acct-card" tabindex="0" role="group" aria-label="${escapeHtml(a.name)} account" data-account-card="${a.id}"><div class="acct-card-top"><div class="acct-main"><div class="acct-name">${escapeHtml(a.name)}</div><div class="acct-meta"><span class="badge">${credit?"Credit card":escapeHtml(TYPE_LABEL[a.type]||a.type)}</span>${a.cur!=="USD"?` · ${escapeHtml(a.cur)}${credit?"":" · ≈ "+fmt(toUSD(a.balance,a.cur))}`:""} ${credit&&a.rewards?`· ${Math.round(a.rewards).toLocaleString()} pts`:""}</div></div></div><div class="acct-bal ${credit?(a.balance>0?'owe':''):(a.balance<0?'neg':'')}">${credit&&a.balance>0?"owe ":""}${money(a.balance,a.cur)}</div><div class="acct-card-action" hidden><button class="btn-ghost" type="button" data-view-account="${a.id}">View details</button></div></article>`;
+  const assetRow=a=>accountCard(a,false);
+  const cardRow=a=>accountCard(a,true);
 
   $("acctList").innerHTML=
-    `<div class="acct-group"><h3>Assets</h3>${assetAccts().map(assetRow).join("")}${loanBlock("owed")}</div>`+
-    `<div class="acct-group" style="margin-top:18px"><h3>Credit cards &amp; loans</h3>${creditAccts().map(cardRow).join("")}${loanBlock("owe")}</div>`;
+    `<div class="acct-group"><h3>Assets</h3><div class="acct-grid">${assetAccts().map(assetRow).join("")}</div>${loanBlock("owed")}</div>`+
+    `<div class="acct-group" style="margin-top:18px"><h3>Credit cards &amp; loans</h3><div class="acct-grid">${creditAccts().map(cardRow).join("")}</div>${loanBlock("owe")}</div>`;
 
   const cards=creditAccts();
   $("rewardsList").innerHTML=cards.length
@@ -875,6 +902,23 @@ function closeTx(){ $("txModal").classList.remove("show"); editingTx=null; }
 function delTx(id){ const r=data.find(x=>x.id===id); if(!r) return; if(!confirm(`Delete this ${r.kind}?`)) return; applyTx(r,-1); data=data.filter(x=>x.id!==id); save(); refreshLists(); renderAll(); toast("Deleted."); }
 
 /* ---- accounts CRUD ---- */
+let detailAcctId=null;
+function closeAccountDetails(){ $("accountDetailsModal").classList.remove("show"); detailAcctId=null; }
+function openAccountDetails(id){
+  const a=accounts.find(x=>x.id===id); if(!a) return;
+  detailAcctId=id;
+  const recent=data.filter(r=>r.p===a.name||r.src===a.name).sort((x,y)=>(y.d||"").localeCompare(x.d||"")).slice(0,5);
+  const isCredit=a.type==="credit";
+  const stats=[
+    {k:isCredit?"Balance owed":"Current balance",v:money(a.balance,a.cur),neg:isCredit&&a.balance>0||!isCredit&&a.balance<0},
+    {k:"Account type",v:TYPE_LABEL[a.type]||a.type},
+    ...(isCredit?[{k:"Reward points",v:Math.round(a.rewards||0).toLocaleString()}]:[]),
+    {k:"Recent transactions",v:String(data.filter(r=>r.p===a.name||r.src===a.name).length)}
+  ];
+  $("accountDetailsTitle").textContent=a.name;
+  $("accountDetailsBody").innerHTML=`<div class="acct-detail-summary">${stats.map(s=>`<div class="acct-detail-stat"><div class="k">${escapeHtml(s.k)}</div><div class="v ${s.neg?'neg':''}">${escapeHtml(s.v)}</div></div>`).join("")}</div><h3>Recent activity</h3>${recent.length?`<div class="acct-recent">${recent.map(r=>`<div class="acct-recent-row"><span class="acct-recent-date">${escapeHtml(r.d||"")}</span><div><div class="acct-recent-description">${escapeHtml(r.t||r.kind||"Transaction")}</div>${r.c?`<div class="acct-recent-category">${escapeHtml(r.c)}</div>`:""}</div><strong>${escapeHtml(money(r.a||0,r.cur||a.cur))}</strong></div>`).join("")}</div>`:`<p class="acct-meta">No transactions are linked to this account yet.</p>`}`;
+  $("accountDetailsModal").classList.add("show");
+}
 function openAcct(id){
   editingAcct=id||null; const a=id?accounts.find(x=>x.id===id):null;
   $("acctModalTitle").textContent=a?"Edit account":"Add account";
@@ -1065,14 +1109,19 @@ function bind(){
   $("txCancel").addEventListener("click",closeTx); $("txSave").addEventListener("click",saveEditTx); $("txModal").addEventListener("click",e=>{if(e.target===$("txModal"))closeTx();});
 
   $("acctList").addEventListener("click",e=>{
-    const acct=e.target.closest("[data-acct]"), loan=e.target.closest("[data-loan]"), iadd=e.target.closest("[data-itemadd]"), iedit=e.target.closest("[data-itemedit]"), idel=e.target.closest("[data-itemdel]"), hist=e.target.closest("[data-history]");
-    if(hist){ openHistory(hist.dataset.history); return; }
+    const view=e.target.closest("[data-view-account]"), card=e.target.closest("[data-account-card]"), loan=e.target.closest("[data-loan]"), iadd=e.target.closest("[data-itemadd]"), iedit=e.target.closest("[data-itemedit]"), idel=e.target.closest("[data-itemdel]");
+    if(view){ e.stopPropagation(); openAccountDetails(view.dataset.viewAccount); return; }
     if(iedit){ const [k,id]=iedit.dataset.itemedit.split(":"); openItem(k,id); return; }
     if(idel){ const [k,id]=idel.dataset.itemdel.split(":"); delItem(k,id); return; }
     if(iadd){ openItem(iadd.dataset.itemadd,null); return; }
-    if(acct){ openAcct(acct.dataset.acct); return; }
+    if(card){ $("acctList").querySelectorAll(".acct-card.selected").forEach(c=>{c.classList.remove("selected");const b=c.querySelector("[data-view-account]");if(b)b.parentElement.hidden=true;}); card.classList.add("selected"); const action=card.querySelector(".acct-card-action"); if(action)action.hidden=false; return; }
     if(loan){ const k=loan.dataset.loan; expanded[k]=!expanded[k]; renderAccounts(); }
   });
+  $("acctList").addEventListener("keydown",e=>{const card=e.target.closest("[data-account-card]");if(card&&e.target===card&&(e.key==="Enter"||e.key===" ")){e.preventDefault();card.click();}});
+  $("accountDetailsClose").addEventListener("click",closeAccountDetails);
+  $("accountDetailsModal").addEventListener("click",e=>{if(e.target===$("accountDetailsModal"))closeAccountDetails();});
+  $("accountDetailsEdit").addEventListener("click",()=>{const id=detailAcctId;closeAccountDetails();if(id)openAcct(id);});
+  $("accountDetailsHistory").addEventListener("click",()=>{const id=detailAcctId;closeAccountDetails();if(id)openHistory(id);});
   $("rewardsList").addEventListener("click",e=>{ const b=e.target.closest("[data-redeem]"); if(b)openRedeem(b.dataset.redeem,null); });
   $("curList").addEventListener("change",e=>{ const inp=e.target.closest("[data-rate]"); if(inp){ const c=curObj(inp.dataset.rate); const v=parseFloat(inp.value); if(!isNaN(v)&&v>0){ c.perUSD=v; save(); renderAll(); } } });
   $("addCurBtn").addEventListener("click",()=>{ if(addCurrency()){ refreshLists(); renderAll(); } });
