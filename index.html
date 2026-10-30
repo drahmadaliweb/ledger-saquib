@@ -826,6 +826,7 @@ function addExpense(){
   const tx={id:uid(),kind:"expense",d,c,t,a:round2(a),p,cur,mult,pts,bal:true};
   if(borrowFrom) tx.borrowFrom=borrowFrom; if(forPerson){ tx.forPerson=forPerson; tx.forName=forName; }
   tx.trxId=makeTrxId(tx);
+  if(!confirmDuplicateTransaction(tx)) return;
   data.push(tx); applyTx(tx,+1); save(); refreshLists(); renderAll();
   $("e-details").value=""; $("e-amount").value=""; $("e-mult").value="1"; $("e-for").value=""; $("e-details").focus();
   toast((forPerson?`For ${forName} · `:"")+(pts?`+${Math.round(pts)} pts`:"Added."));
@@ -834,6 +835,7 @@ function addIncome(){
   const d=$("i-date").value,t=$("i-details").value.trim(),a=parseFloat($("i-amount").value),dest=$("i-dest").value;
   if(!d) return toast("Pick a date."); if(isNaN(a)||a<=0) return toast("Enter an amount."); if(!dest) return toast("Pick where it lands.");
   const tx={id:uid(),kind:"income",d,c:"Income",t:t||"Income",a:round2(a),p:dest,cur:curOfAcct(dest),bal:true};
+  if(!confirmDuplicateTransaction(tx)) return;
   data.push(tx); applyTx(tx,+1); save(); refreshLists(); renderAll(); $("i-details").value=""; $("i-amount").value=""; toast("Income added.");
 }
 function addPayment(){
@@ -841,6 +843,7 @@ function addPayment(){
   if(!d) return toast("Pick a date."); if(!card) return toast("Pick a card."); if(isNaN(a)||a<=0) return toast("Enter an amount."); if(!src) return toast("Pick a source."); if(card===src) return toast("Card and source can't match.");
   const cardCur=curOfAcct(card), srcCur=curOfAcct(src); const srcAmt=round2(convert(a,cardCur,srcCur));
   const tx={id:uid(),kind:"payment",d,c:"Card payment",t:`${card} payment`,a:round2(a),p:card,src,cur:cardCur,srcAmt,bal:true};
+  if(!confirmDuplicateTransaction(tx)) return;
   data.push(tx); applyTx(tx,+1); save(); refreshLists(); renderAll(); $("p-amount").value=""; toast("Payment recorded.");
 }
 
@@ -851,6 +854,7 @@ function addRefund(){
   const orig=ofId?data.find(x=>x.id===ofId):null;
   const tx={id:uid(),kind:"refund",d,c:"Refund",t,a:round2(a),p:acct,cur,mult,pts,bal:true};
   if(orig){ tx.refOf=orig.id; tx.trxId="X"+(orig.trxId||makeTrxId(orig)); } else tx.trxId="X"+makeTrxId(tx);
+  if(!confirmDuplicateTransaction(tx)) return;
   data.push(tx); applyTx(tx,+1); save(); refreshLists(); renderAll(); $("r-details").value=""; $("r-amount").value=""; $("r-mult").value="0"; $("r-of").value="";
   toast(pts?`Refund · −${Math.round(pts)} pts`:"Refund added.");
 }
@@ -859,6 +863,7 @@ function addLoanPay(){
   if(!d) return toast("Pick a date."); const it=iOwe.find(x=>x.id===id); if(!it) return toast("Add who you owe under Accounts first."); if(isNaN(a)||a<=0) return toast("Enter an amount."); if(a>it.amount+0.001) return toast(`More than you owe (${money(it.amount,it.cur)}).`); if(!src) return toast("Pick a source.");
   const srcAmt=round2(convert(a,it.cur,curOfAcct(src)));
   const tx={id:uid(),kind:"loanpay",d,c:"Loan paid",t:`Paid ${it.person}`,a:round2(a),cur:it.cur,itemId:it.id,person:it.person,src,srcAmt,bal:true};
+  if(!confirmDuplicateTransaction(tx)) return;
   data.push(tx); applyTx(tx,+1); save(); refreshLists(); renderAll(); $("lp-amount").value=""; toast("Loan payment recorded.");
 }
 function addLoanRecv(){
@@ -866,6 +871,7 @@ function addLoanRecv(){
   if(!d) return toast("Pick a date."); const it=owedToMe.find(x=>x.id===id); if(!it) return toast("Add who owes you under Accounts first."); if(isNaN(a)||a<=0) return toast("Enter an amount."); if(a>it.amount+0.001) return toast(`More than they owe (${money(it.amount,it.cur)}).`); if(!dest) return toast("Pick where it lands.");
   const srcAmt=round2(convert(a,it.cur,curOfAcct(dest)));
   const tx={id:uid(),kind:"loanrecv",d,c:"Loan received",t:`Received from ${it.person}`,a:round2(a),cur:it.cur,itemId:it.id,person:it.person,src:dest,srcAmt,bal:true};
+  if(!confirmDuplicateTransaction(tx)) return;
   data.push(tx); applyTx(tx,+1); save(); refreshLists(); renderAll(); $("lr-amount").value=""; toast("Loan receipt recorded.");
 }
 /* ---- edit transaction ---- */
@@ -1042,14 +1048,16 @@ function importCSV(text){
   const rows=parseCSV(text); if(rows.length<2) return toast("File looks empty.");
   const head=rows[0].map(h=>h.trim().toLowerCase()); const ix=n=>head.indexOf(n);
   const di=ix("date"),ci=ix("type")>=0?ix("type"):(ix("category")>=0?ix("category"):ix("type/category")),ti=ix("details"),ai=ix("amount"),pi=ix("payment method")>=0?ix("payment method"):ix("account");
-  let added=0;
+  let added=0,duplicates=0; const seen=new Set(data.map(fingerprint));
   for(let i=1;i<rows.length;i++){ const row=rows[i]; if(!row||row.every(c=>!c.trim())) continue;
     const iso=toISO(row[di]); const amt=parseFloat(String(row[ai]).replace(/[$,]/g,"")); if(!iso||isNaN(amt)) continue;
     const cat=(row[ci]||"Misc").trim(); const pay=pi>=0?(row[pi]||"").trim():"";
+    const tx={id:uid(),kind:"expense",d:iso,c:cat,t:(row[ti]||"").trim(),a:round2(amt),p:pay,cur:"USD",mult:1,pts:0,bal:false};
+    const key=fingerprint(tx); if(pay&&seen.has(key)){duplicates++;continue;} if(pay)seen.add(key);
     if(cat&&!allCats().includes(cat)&&!["Income","Card payment","Redeem"].includes(cat)) userCats.push(cat);
-    data.push({id:uid(),kind:"expense",d:iso,c:cat,t:(row[ti]||"").trim(),a:round2(amt),p:pay,cur:"USD",mult:1,pts:0,bal:false}); added++;
+    data.push(tx); added++;
   }
-  save(); refreshLists(); renderAll(); toast(added?`Imported ${added} expense${added>1?"s":""}.`:"No valid rows.");
+  save(); refreshLists(); renderAll(); toast(added?`Imported ${added} expense${added>1?"s":""}${duplicates?`; skipped ${duplicates} possible duplicate${duplicates>1?"s":""}`:""}.`:duplicates?`No new rows. Skipped ${duplicates} possible duplicate${duplicates>1?"s":""}.`:"No valid rows.");
 }
 function toISO(s){ if(!s) return null; s=s.trim(); if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   const m=s.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/); if(m){let y=m[3]?(m[3].length===2?"20"+m[3]:m[3]):"2026"; return `${y}-${String(+m[1]).padStart(2,"0")}-${String(+m[2]).padStart(2,"0")}`;} const dt=new Date(s); return isNaN(dt)?null:dt.toISOString().slice(0,10); }
@@ -1276,8 +1284,10 @@ function dateImport(v){if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(
 let importBook;
 async function readImport(f){try{importBook=XLSX.read(await f.arrayBuffer(),{type:'array'});$('sheetChoice').innerHTML=importBook.SheetNames.map(n=>`<option>${escapeHtml(n)}</option>`).join('');$('importPanel').hidden=false;loadSheet();}catch(e){alert('Cannot read file: '+e.message);}}
 function loadSheet(){importRows=XLSX.utils.sheet_to_json(importBook.Sheets[$('sheetChoice').value],{defval:''});const keys=Object.keys(importRows[0]||{}),cols=['Date','Details','Amount','Category','Account','Currency','Kind'];$('mapping').innerHTML=cols.map(k=>field(k,`<select id="map${k}"><option value="">Default / not provided</option>${keys.map(h=>`<option value="${escapeHtml(h)}" ${h.toLowerCase()===k.toLowerCase()?'selected':''}>${escapeHtml(h)}</option>`).join('')}</select>`)).join('');$('importPreview').innerHTML='Map the columns, then preview.';$('commitImport').disabled=true;}
-function fingerprint(t){return [t.d,t.kind,t.cur,t.p,Math.round(t.a*100),(t.t||'').trim().toLowerCase()].join('|');}
-function previewImport(){const seen=new Set(data.map(fingerprint)),ids=new Set(data.map(t=>t.id));importPlan=[];const get=(r,k)=>r[$('map'+k).value];for(const [i,r]of importRows.entries()){let t,error='',dup=false;try{const signed=Number(String(get(r,'Amount')).replace(/[$,৳ ]/g,''));if(get(r,'Amount')===''||!Number.isFinite(signed)||signed===0)throw Error('Amount must be nonzero');const d=dateImport(get(r,'Date'));if(!validDate(d))throw Error('Invalid date');const kind=String(get(r,'Kind')||($('signRule').value==='signed'&&signed<0?'income':'expense')).toLowerCase();if(!['expense','income','payment','refund','transfer','redeem','loanpay','loanrecv','eventcost','eventcredit'].includes(kind))throw Error('Unknown transaction type');let raw={};if(r.Record){try{raw=JSON.parse(r.Record);}catch{throw Error('Invalid Record field');}}t={...raw,id:String(r.ID||raw.id||uid()),d,kind,c:String(get(r,'Category')||'Misc'),t:String(get(r,'Details')||''),a:Math.abs(signed),p:String(get(r,'Account')||$('importAccount').value),cur:String(get(r,'Currency')||'USD').toUpperCase(),src:String(r.Source||raw.src||''),fx:Number(r.RatePerUSD||raw.fx||rate(String(get(r,'Currency')||'USD'))),bal:$('balanceMode').value==='apply'};if(!currencies.some(c=>c.code===t.cur))throw Error('Unknown currency');if(!(t.fx>0))throw Error('Invalid exchange rate');if(!/^[a-zA-Z0-9_-]+$/.test(t.id))throw Error('Invalid transaction ID');if(['loanpay','loanrecv'].includes(kind)&&!([...iOwe,...owedToMe].some(x=>x.id===t.itemId)))throw Error('Restore the full backup to recover this linked loan');if(['eventcost','eventcredit'].includes(kind)&&!events.some(e=>e.id===t.eventId))throw Error('Restore the full backup to recover this event');if(kind==='redeem'&&!r.Record)throw Error('Redemptions require the original Record field');if(t.bal&&!['loanpay','loanrecv'].includes(kind)&&!(kind==='eventcredit'&&t.mode==='later')&&!accByName(t.p))throw Error('Choose an existing account');if(accByName(t.p)&&curOfAcct(t.p)!==t.cur)throw Error('Account currency does not match');if(kind==='payment'||kind==='transfer'||kind==='loanpay'||kind==='loanrecv'){if(!accByName(t.src)||t.src===t.p)throw Error('Missing or invalid source account');t.srcAmt=Number(r.SourceAmount||raw.srcAmt||t.a);if(!(t.srcAmt>0))throw Error('Invalid source amount');}if(kind==='refund'&&t.refOf&&!data.some(x=>x.id===t.refOf)&&!importRows.some(x=>x.ID===t.refOf))throw Error('Missing original purchase');const fp=fingerprint(t);dup=seen.has(fp)||ids.has(t.id);seen.add(fp);ids.add(t.id);}catch(e){error=e.message;}importPlan.push({t,error,dup,row:i+2});}
+function fingerprint(t){return [t.d||'',t.kind||'',String(t.cur||'USD').toUpperCase(),t.p||'',t.src||'',t.itemId||'',Math.round((Number(t.a)||0)*100)].join('|');}
+function hasDuplicateTransaction(t){if(!t.p&&!t.src)return false;const key=fingerprint(t);return data.some(x=>x.id!==t.id&&(x.p||x.src)&&fingerprint(x)===key);}
+function confirmDuplicateTransaction(t){if(!hasDuplicateTransaction(t))return true;const acct=t.p||t.src;return confirm(`A ${t.kind} of ${money(t.a,t.cur)} on ${prettyDate(t.d)} for ${acct} already exists. Description details are ignored when checking duplicates. Add this transaction anyway?`);}
+function previewImport(){const seen=new Set(data.map(fingerprint)),ids=new Set(data.map(t=>t.id));importPlan=[];const get=(r,k)=>r[$('map'+k).value];for(const [i,r]of importRows.entries()){let t,error='',dup=false;try{const signed=Number(String(get(r,'Amount')).replace(/[$,৳ ]/g,''));if(get(r,'Amount')===''||!Number.isFinite(signed)||signed===0)throw Error('Amount must be nonzero');const d=dateImport(get(r,'Date'));if(!validDate(d))throw Error('Invalid date');const kind=String(get(r,'Kind')||($('signRule').value==='signed'&&signed<0?'income':'expense')).toLowerCase();if(!['expense','income','payment','refund','transfer','redeem','loanpay','loanrecv','eventcost','eventcredit'].includes(kind))throw Error('Unknown transaction type');let raw={};if(r.Record){try{raw=JSON.parse(r.Record);}catch{throw Error('Invalid Record field');}}t={...raw,id:String(r.ID||raw.id||uid()),d,kind,c:String(get(r,'Category')||'Misc'),t:String(get(r,'Details')||''),a:Math.abs(signed),p:String(get(r,'Account')||$('importAccount').value),cur:String(get(r,'Currency')||'USD').toUpperCase(),src:String(r.Source||raw.src||''),fx:Number(r.RatePerUSD||raw.fx||rate(String(get(r,'Currency')||'USD'))),bal:$('balanceMode').value==='apply'};if(!currencies.some(c=>c.code===t.cur))throw Error('Unknown currency');if(!(t.fx>0))throw Error('Invalid exchange rate');if(!/^[a-zA-Z0-9_-]+$/.test(t.id))throw Error('Invalid transaction ID');if(['loanpay','loanrecv'].includes(kind)&&!([...iOwe,...owedToMe].some(x=>x.id===t.itemId)))throw Error('Restore the full backup to recover this linked loan');if(['eventcost','eventcredit'].includes(kind)&&!events.some(e=>e.id===t.eventId))throw Error('Restore the full backup to recover this event');if(kind==='redeem'&&!r.Record)throw Error('Redemptions require the original Record field');if(t.bal&&!['loanpay','loanrecv'].includes(kind)&&!(kind==='eventcredit'&&t.mode==='later')&&!accByName(t.p))throw Error('Choose an existing account');if(accByName(t.p)&&curOfAcct(t.p)!==t.cur)throw Error('Account currency does not match');if(kind==='payment'||kind==='transfer'||kind==='loanpay'||kind==='loanrecv'){if(!accByName(t.src)||t.src===t.p)throw Error('Missing or invalid source account');t.srcAmt=Number(r.SourceAmount||raw.srcAmt||t.a);if(!(t.srcAmt>0))throw Error('Invalid source amount');}if(kind==='refund'&&t.refOf&&!data.some(x=>x.id===t.refOf)&&!importRows.some(x=>x.ID===t.refOf))throw Error('Missing original purchase');const fp=fingerprint(t);dup=(Boolean(t.p||t.src)&&seen.has(fp))||ids.has(t.id);if(t.p||t.src)seen.add(fp);ids.add(t.id);}catch(e){error=e.message;}importPlan.push({t,error,dup,row:i+2});}
 const good=importPlan.filter(x=>!x.error&&!x.dup);$('importPreview').innerHTML=`<p><b>${good.length} ready</b> · ${importPlan.filter(x=>x.dup).length} possible duplicates skipped · ${importPlan.filter(x=>x.error).length} errors skipped</p><p>${$('balanceMode').value==='apply'?'These entries will update account balances.':'History only: existing account balances will not change.'} Imported transfers and payments are excluded from spending.</p><div class="table-scroll"><table><thead><tr><th>Row</th><th>Date</th><th>Details</th><th>Amount</th><th>Result</th></tr></thead><tbody>${importPlan.slice(0,100).map(x=>`<tr><td>${x.row}</td><td>${x.t?.d||''}</td><td>${escapeHtml(x.t?.t||'')}</td><td>${x.t?.a||''}</td><td>${escapeHtml(x.error||(x.dup?'Duplicate — skipped':'Ready'))}</td></tr>`).join('')}</tbody></table></div>`;$('commitImport').disabled=!good.length;}
 function commitImport(){checkpoint();const rows=importPlan.filter(x=>!x.error&&!x.dup).map(x=>x.t);rows.forEach(t=>{data.push(t);applyTx(t,1);if(t.c&&!allCats().includes(t.c))userCats.push(t.c);});save();refreshLists();renderAll();$('commitImport').disabled=true;$('importPreview').textContent=`Imported ${rows.length} entries. Use Undo last change to reverse the batch.`;}
 function setupUpgrade(){
