@@ -59,12 +59,26 @@
     };
   }
   async function request(path, options = {}, token = session?.access_token) {
-    const response = await fetch(config.url + path, {
-      ...options,
-      headers: headers(options.headers || {}, token)
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    let response;
     let body = null;
-    try { body = await response.json(); } catch {}
+    try {
+      response = await fetch(config.url + path, {
+        ...options,
+        headers: headers(options.headers || {}, token),
+        signal: controller.signal
+      });
+      try { body = await response.json(); }
+      catch (error) { if (error?.name === 'AbortError') throw error; }
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw new Error('Supabase did not respond within 15 seconds. Check your connection, then retry. Your cloud data was not changed.');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
     if (!response.ok) {
       const error = new Error(body?.msg || body?.message || body?.error_description || body?.error || `Supabase request failed (${response.status}).`);
       error.status = response.status;
@@ -177,12 +191,15 @@
         <label>Password<input id="ledgerPassword" type="password" autocomplete="current-password" required minlength="8"></label>
         <div class="ledger-auth-actions">
           <button id="ledgerSignIn" class="btn-primary">Sign in</button>
+          ${session?.access_token ? '<button id="ledgerRetryCloud" class="btn-ghost" type="button">Retry cloud connection</button>' : ''}
         </div>
         <p class="ledger-auth-foot">This is a private ledger. The owner creates accounts and sends invitations. Each account has its own separate ledger.</p>
         <p class="ledger-auth-config" ${validConfig() ? 'hidden' : ''}>Set your Supabase Project URL and publishable/anon key in <code>supabase-config.js</code> before publishing.</p>
       </section>`;
     document.body.appendChild(gate);
     $('ledgerSignIn').onclick = signIn;
+    const retry = $('ledgerRetryCloud');
+    if (retry) retry.onclick = () => location.reload();
   }
   function escapeText(value) {
     return String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -380,7 +397,10 @@
       session = cached;
       (async () => {
         try { await openLedger(); }
-        catch (error) { sessionWrite(null); authView(error.message || 'Sign in to continue.'); }
+        catch (error) {
+          if (error?.status === 401 || error?.status === 403) sessionWrite(null);
+          authView(error.message || 'Could not open the cloud ledger. Retry the connection or sign in again.');
+        }
       })();
     } else authView();
   } else authView();
