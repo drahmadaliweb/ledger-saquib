@@ -290,6 +290,7 @@ body{background:#f2f4f0}.wrap{max-width:1320px;padding:32px 28px 80px}header.top
 <style>.cr-merchant-group{min-width:0;padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--surface-2)}.cr-merchant-group>h3{margin:0 0 16px}.cr-merchant-group>.cr-offer{border-radius:10px;margin-top:12px;background:var(--surface)}.cr-effective-breakdown{font-size:12px;color:var(--muted)}</style>
 <style>.cr-search-panel{margin-top:16px}.cr-search-form>label{display:block;font-size:13px;font-weight:600;margin-bottom:9px;color:var(--ink)}.cr-search-controls{display:flex;gap:10px;align-items:center}.cr-search-controls input{flex:1;min-width:0;padding:12px;border:1px solid var(--line-strong);border-radius:9px;background:var(--surface-2);font:inherit}.cr-search-controls .btn-primary{width:auto;flex:none}.cr-search-panel #crSearchStatus{margin:10px 0 0;font-size:12px;color:var(--muted)}.cr-search-panel #crSearchStatus:empty{display:none}#view-card-rewards [hidden]{display:none!important}@media(max-width:520px){.cr-search-controls{flex-wrap:wrap}.cr-search-controls input{flex-basis:100%}.cr-search-controls button{flex:1}}</style>
 <style>.cr-quick-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px}.cr-quick-filters>span{font-size:12px;color:var(--muted);margin-right:4px}.cr-quick-filters .btn-ghost{border-radius:999px;font-size:12px;padding:7px 12px}.cr-quick-filters .cr-filter-active{background:var(--emerald);color:white;border-color:var(--emerald)}.cr-compact-group{align-self:start;background:var(--surface);padding:16px}.cr-merchant-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}.cr-merchant-heading h3{margin:0;font-size:17px}.cr-merchant-heading small{color:var(--muted);font-size:11px}.cr-compact-offer{padding:14px 0;border-top:1px solid var(--line)}.cr-top-offer{padding:14px;border-radius:10px;border:0;background:var(--emerald-soft)}.cr-compact-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.cr-compact-top strong{display:block;font-size:18px;color:var(--emerald-deep)}.cr-compact-top span{display:block;margin-top:3px;font-size:13px;font-weight:600}.cr-star{font-size:22px;line-height:1;padding:5px 8px;background:var(--surface);border:1px solid var(--line)}.cr-compact-breakdown,.cr-compact-terms{font-size:11px;line-height:1.6;color:var(--muted);margin:8px 0}.cr-compact-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}.cr-compact-actions button{font-size:12px;padding:6px 10px}#view-card-rewards .cr-compare-alternatives{border:0;padding:0;margin-top:12px}#view-card-rewards .cr-compare-alternatives summary{font-size:12px;font-weight:600;padding:6px 0}.cr-activation-badge{display:inline-block;background:var(--amber-soft);color:#865811;padding:4px 8px;border-radius:999px;font-size:11px}.cr-activation-fields{display:flex;flex-direction:column;gap:10px;grid-column:1/-1}.cr-activation-fields label{display:flex;gap:8px;align-items:center;font-size:13px}.cr-activation-fields input{width:auto}.cr-activation-fields small{color:var(--muted);font-size:12px}.cr-detail-offer-flags{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:12px 0}</style>
+<style>.cr-purchase-panel .compact-grid{margin-top:0}.cr-purchase-result{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:16px;margin:10px 0;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}.cr-purchase-result h3{margin:8px 0;font-size:16px}.cr-purchase-result p{font-size:13px;margin:8px 0}.cr-purchase-result small{display:block;color:var(--muted);font-size:12px;margin:5px 0}.cr-purchase-best{background:var(--emerald-soft);border-color:var(--emerald)}.cr-purchase-value{text-align:right;flex:none}.cr-purchase-value strong{display:block;color:var(--emerald-deep);font-size:24px}.cr-purchase-value span{display:block;font-size:12px;color:var(--muted);margin:6px 0 10px}.cr-purchase-panel .btn-primary{width:auto}#view-card-rewards .cr-purchase-conditional{padding-top:12px;margin-top:12px;border-top:1px solid var(--line)}@media(max-width:520px){.cr-purchase-result{align-items:flex-start;flex-direction:column}.cr-purchase-value{text-align:left;width:100%}}</style>
 </head>
 <body>
 <div class="wrap">
@@ -1601,6 +1602,64 @@ crEdit=function(kind,id){crBeforeActivationEdit(kind,id);if(kind!=='offer')retur
 /* Merchant offers before category cashback */
 const crBeforeMerchantOrder=crRender;
 crRender=function(){crBeforeMerchantOrder();const root=$('view-card-rewards');if(!root)return;const sections=[...root.querySelectorAll(':scope > section')],merchant=sections.find(s=>s.querySelector('.card-h h2')?.textContent==='Merchant offers'),category=sections.find(s=>s.querySelector('.card-h h2')?.textContent==='Best rewards by category');if(merchant&&category)category.before(merchant);};
+
+/* Shared purchase rewards calculator */
+let crPurchase={merchant:'',category:'',amount:'',currency:'USD',submitted:false};
+const crMatch=s=>String(s||'').trim().toLocaleLowerCase();
+function crCalculatePurchase(p){
+ const amount=Number(p.amount),currency=p.currency,merchant=crMatch(p.merchant),category=crMatch(p.category);
+ if(!(amount>0)||!currencies.some(c=>c.code===currency)||(!merchant&&!category))return {error:'Enter a positive amount and a merchant or category.'};
+ const ready=[],activation=[],points=[];
+ for(const a of creditAccts()){
+  const spend=convert(amount,currency,a.cur||'USD');
+  const rates=extra.cardRewardRates.filter(r=>r.card===a.id&&crActive(r)&&crMatch(r.category)===category);
+  const baseCash=Math.max(0,...rates.filter(r=>r.unit==='percent').map(r=>Number(r.value)||0));
+  const basePoints=Math.max(0,...rates.filter(r=>r.unit==='points').map(r=>Number(r.value)||0));
+  const offers=extra.cardMerchantOffers.filter(o=>o.card===a.id&&crActive(o)&&merchant&&crMatch(o.merchant)===merchant);
+  const insufficient=offers.some(o=>spend<(Number(o.minimum)||0));
+  const candidates=[];
+  if(baseCash>0)candidates.push({card:a,total:convert(spend*baseCash/100,a.cur||'USD',currency),bonus:0,regular:baseCash,offer:null,notes:[]});
+  if(basePoints>0)points.push({card:a,basePoints:spend*basePoints,pointRate:basePoints,bonusPoints:0,offer:null,pending:false});
+  for(const o of offers){
+   if(spend<(Number(o.minimum)||0))continue;
+   const configured=Number.isFinite(o.regularRate),regular=configured?Number(o.regularRate):baseCash;
+   const pending=crNeedsActivation(o);
+   if(o.unit==='points'){
+    points.push({card:a,basePoints:spend*basePoints,pointRate:basePoints,bonusPoints:Number(o.value)||0,offer:o,pending});
+    continue;
+   }
+   let bonus=o.unit==='cash'?Number(o.value)||0:spend*(Number(o.value)||0)/100;
+   const cap=Number(o.cap)||0,capped=cap>0&&bonus>cap;if(cap>0)bonus=Math.min(bonus,cap);
+   const notes=[];if(capped)notes.push('Merchant cashback cap applied');
+   if(!configured&&!rates.some(r=>r.unit==='percent'))notes.push('Regular cash back not configured; using 0%');
+   if(o.details)notes.push('Check offer conditions');
+   const row={card:a,total:convert(bonus+spend*regular/100,a.cur||'USD',currency),bonus:convert(bonus,a.cur||'USD',currency),regular,offer:o,notes};
+   (pending?activation:candidates).push(row);
+  }
+  if(candidates.length){candidates.sort((x,y)=>y.total-x.total||crAlpha(x.offer?.to||'9999',y.offer?.to||'9999'));const best=candidates[0];if(insufficient&&!best.offer)best.notes.push('Merchant offer minimum not met');ready.push(best);}
+ }
+ const rank=(x,y)=>y.total-x.total||crAlpha(x.offer?.to||'9999',y.offer?.to||'9999')||crAlpha(x.card.name,y.card.name);
+ ready.sort(rank);activation.sort(rank);points.sort((x,y)=>crAlpha(x.card.name,y.card.name));
+ return {ready,activation,points,amount,currency};
+}
+function crPurchaseResults(){const target=$('crPurchaseResults');if(!target)return;if(!crPurchase.submitted){target.innerHTML='';return;}
+ const r=crCalculatePurchase(crPurchase);if(r.error){target.textContent=r.error;return;}
+ const n=x=>Number(x.toFixed(2)).toLocaleString();
+ const row=(x,i,conditional=false)=>`<article class="cr-purchase-result ${!conditional&&i===0?'cr-purchase-best':''}"><div><span class="badge">${conditional?'Needs activation':i===0?'Best estimated cash back':'Alternative'}</span><h3>${escapeHtml(x.card.name)}</h3><p>${x.offer?'Merchant offer + '+n(x.regular)+'% regular':'Saved category rate: '+n(x.regular)+'%'}</p><small>${x.bonus?money(x.bonus,r.currency)+' merchant reward · ':''}${money(x.total-x.bonus,r.currency)} regular reward${x.offer?.to?' · Expires '+crDate(x.offer.to):''}</small>${x.notes.length?`<small>${escapeHtml(x.notes.join(' · '))}</small>`:''}</div><div class="cr-purchase-value"><strong>${money(x.total,r.currency)}</strong><span>${n(x.total/r.amount*100)}% effective</span>${btn('View card',`crOpenCard('${x.card.id}')`)}</div></article>`;
+ target.innerHTML=`<p class="acct-meta">Same purchase: ${money(r.amount,r.currency)}${crPurchase.merchant?' · '+escapeHtml(crPurchase.merchant):''}${crPurchase.category?' · '+escapeHtml(crPurchase.category):''}. Current offers only; highest single eligible cash offer per card, without stacking multiple merchant offers.</p>${r.ready.length?r.ready.map((x,i)=>row(x,i)).join(''):'<p>No eligible cash-back result from the saved rates and offers. Add a category rate or a matching merchant offer.</p>'}${r.activation.length?'<details class="cr-purchase-conditional"><summary>Offers requiring activation ('+r.activation.length+')</summary>'+r.activation.map((x,i)=>row(x,i,true)).join('')+'</details>':''}${r.points.length?'<details class="cr-purchase-conditional"><summary>Points rewards — shown separately</summary>'+r.points.map(x=>`<article class="cr-purchase-result"><div><h3>${escapeHtml(x.card.name)}</h3><p>${x.basePoints?n(x.basePoints)+' estimated regular points ('+n(x.pointRate)+' per account-currency unit)':'Regular points rate not configured'}${x.bonusPoints?' · '+n(x.bonusPoints)+' merchant bonus points':''}</p>${x.pending?'<span class="cr-activation-badge">Needs activation</span>':''}</div>${btn('View card',`crOpenCard('${x.card.id}')`)}</article>`).join('')+'</details>':''}<p class="acct-meta">Estimates use saved rates and full offer caps; previous cap usage and conditions in notes are not automatically checked. Review eligibility before paying.</p>`;
+}
+const crBeforePurchaseRender=crRender;
+crRender=function(){crBeforePurchaseRender();const root=$('view-card-rewards');if(!root)return;
+ const panel=document.createElement('section');panel.className='card cr-purchase-panel';
+ panel.innerHTML='<div class="card-h"><h2>Which card should I use?</h2></div><div class="card-b"><form id="crPurchaseForm" class="compact-grid">'+field('Merchant','<input id="crPurchaseMerchant" list="crPurchaseMerchants" placeholder="e.g. Walmart" maxlength="100">')+field('Category','<input id="crPurchaseCategory" list="crPurchaseCategories" placeholder="e.g. Grocery" maxlength="80">')+field('Purchase amount','<input id="crPurchaseAmount" type="number" min="0.01" step="0.01" required>')+field('Currency','<select id="crPurchaseCurrency">'+currencies.map(c=>'<option value="'+escapeHtml(c.code)+'">'+escapeHtml(c.code)+'</option>').join('')+'</select>')+'<button type="submit" class="btn-primary">Compare cards</button><button type="button" class="btn-ghost" id="crPurchaseClear">Clear comparison</button></form><datalist id="crPurchaseMerchants"></datalist><datalist id="crPurchaseCategories"></datalist><div id="crPurchaseResults" aria-live="polite"></div></div>';
+ const search=root.querySelector('.cr-search-panel');if(search)search.after(panel);else root.prepend(panel);
+ $('crPurchaseMerchants').innerHTML=[...new Set(extra.cardMerchantOffers.map(o=>o.merchant))].sort(crAlpha).map(v=>'<option value="'+escapeHtml(v)+'">').join('');
+ $('crPurchaseCategories').innerHTML=[...new Set(extra.cardRewardRates.map(r=>r.category))].sort(crAlpha).map(v=>'<option value="'+escapeHtml(v)+'">').join('');
+ for(const [key,id]of Object.entries({merchant:'crPurchaseMerchant',category:'crPurchaseCategory',amount:'crPurchaseAmount',currency:'crPurchaseCurrency'}))$(id).value=crPurchase[key];
+ $('crPurchaseForm').onsubmit=e=>{e.preventDefault();crPurchase={merchant:$('crPurchaseMerchant').value.trim(),category:$('crPurchaseCategory').value.trim(),amount:$('crPurchaseAmount').value,currency:$('crPurchaseCurrency').value,submitted:true};crPurchaseResults();};
+ $('crPurchaseClear').onclick=()=>{crPurchase={merchant:'',category:'',amount:'',currency:'USD',submitted:false};$('crPurchaseForm').reset();$('crPurchaseCurrency').value='USD';crPurchaseResults();};
+ crPurchaseResults();
+};
 
 window.__ledgerStart = () => { init(); setupUpgrade(); };
 window.__ledgerStore = store;
