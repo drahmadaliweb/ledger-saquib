@@ -1493,7 +1493,7 @@ crRender=function(){
   });
   rateEditor?.remove();offerEditor?.remove();
   // One merchant tile per merchant, with the highest current offer in each reward format.
-  const merchantGrid=overview.querySelectorAll(':scope > section')[1]?.querySelector('.cr-grid');
+  const merchantGrid=[...overview.querySelectorAll(':scope > section')].find(s=>s.querySelector('.card-h h2')?.textContent==='Merchant offers')?.querySelector('.cr-grid');
   if(merchantGrid){
     const groups=new Map();
     extra.cardMerchantOffers.filter(o=>crCard(o.card)&&crActive(o)).forEach(o=>{const key=o.merchant.trim().toLowerCase();if(!groups.has(key))groups.set(key,[]);groups.get(key).push(o);});
@@ -1597,6 +1597,10 @@ crRender=function(){crBeforeCompactRender();const root=$('view-card-rewards');if
 };
 const crBeforeActivationEdit=crEdit;
 crEdit=function(kind,id){crBeforeActivationEdit(kind,id);if(kind!=='offer')return;const o=extra.cardMerchantOffers.find(o=>o.id===id);if(!o)return;$('crRequiresActivation').checked=!!o.requiresActivation;$('crActivated').checked=!!o.activated;};
+
+/* Merchant offers before category cashback */
+const crBeforeMerchantOrder=crRender;
+crRender=function(){crBeforeMerchantOrder();const root=$('view-card-rewards');if(!root)return;const sections=[...root.querySelectorAll(':scope > section')],merchant=sections.find(s=>s.querySelector('.card-h h2')?.textContent==='Merchant offers'),category=sections.find(s=>s.querySelector('.card-h h2')?.textContent==='Best rewards by category');if(merchant&&category)category.before(merchant);};
 
 window.__ledgerStart = () => { init(); setupUpgrade(); };
 window.__ledgerStore = store;
