@@ -1607,32 +1607,55 @@ crRender=function(){crBeforeMerchantOrder();const root=$('view-card-rewards');if
 /* Shared purchase rewards calculator */
 let crPurchase={merchant:'',category:'',amount:'',currency:'USD',submitted:false};
 const crMatch=s=>String(s||'').trim().toLocaleLowerCase();
+/* Unified merchant and category purchase comparison */
+function crResolvePurchase(p){
+ const categories=crSharedCategories(),offers=extra.cardMerchantOffers||[];
+ const canonicalCategory=value=>categories.find(c=>crMatch(c)===crMatch(value))||String(value||'').trim();
+ const canonicalMerchant=value=>offers.find(o=>crMatch(o.merchant)===crMatch(value))?.merchant||String(value||'').trim();
+ let merchant=canonicalMerchant(p.merchant),category=canonicalCategory(p.category),explanation='';
+ if(!merchant&&category){
+  const matchingMerchant=offers.find(o=>crMatch(o.merchant)===crMatch(category));
+  if(matchingMerchant){merchant=matchingMerchant.merchant;explanation='Included matching merchant offers for '+merchant+'.';}
+ }
+ if(merchant&&!category){
+  const exact=categories.find(c=>crMatch(c)===crMatch(merchant));
+  const mapped=new Map();offers.filter(o=>crMatch(o.merchant)===crMatch(merchant)&&o.category).forEach(o=>mapped.set(crMatch(o.category),canonicalCategory(o.category)));
+  if(exact){category=exact;explanation='Matched merchant to the saved '+category+' category.';}
+  else if(mapped.size===1){category=[...mapped.values()][0];explanation='Category inferred from saved merchant offers: '+category+'.';}
+  else if(mapped.size>1)return {error:'Multiple categories are saved for '+merchant+': '+[...mapped.values()].sort(crAlpha).join(', ')+'. Choose the category for this purchase.'};
+  else if(categories.length)return {error:'Choose a category for '+merchant+'. No category mapping is saved for this merchant yet.'};
+  else explanation='No categories are configured; comparing saved card defaults and merchant offers.';
+ }
+ if(category&&!categories.some(c=>crMatch(c)===crMatch(category)))return {error:'Choose a saved reward category, or add this category to your cards first.'};
+ return {merchant,category,explanation};
+}
 function crCalculatePurchase(p){
- const amount=Number(p.amount),currency=p.currency,merchant=crMatch(p.merchant),category=crMatch(p.category);
- if(!(amount>0)||!currencies.some(c=>c.code===currency)||(!merchant&&!category))return {error:'Enter a positive amount and a merchant or category.'};
- const ready=[],activation=[],points=[];
+ crState();const amount=Number(p.amount),currency=p.currency;
+ if(!(amount>0)||!currencies.some(c=>c.code===currency)||(!crMatch(p.merchant)&&!crMatch(p.category)))return {error:'Enter a positive amount and a merchant or category.'};
+ const resolved=crResolvePurchase(p);if(resolved.error)return resolved;
+ const merchant=crMatch(resolved.merchant),category=crMatch(resolved.category);
+ const ready=[],activation=[],points=[],unknownCards=[];
  for(const a of creditAccts()){
   const spend=convert(amount,currency,a.cur||'USD');
-  const rates=extra.cardRewardRates.filter(r=>r.card===a.id&&crActive(r)&&crMatch(r.category)===category);
-  const cardBase=crBaseRate(a.id,category),baseCash=cardBase.cashback;
-  const basePoints=cardBase.points;
+  const cardBase=crBaseRate(a.id,category),baseCash=cardBase.cashback,basePoints=cardBase.points;
   const offers=extra.cardMerchantOffers.filter(o=>o.card===a.id&&crActive(o)&&merchant&&crMatch(o.merchant)===merchant);
   const insufficient=offers.some(o=>spend<(Number(o.minimum)||0));
   const candidates=[];
-  if(baseCash>0)candidates.push({card:a,total:convert(spend*baseCash/100,a.cur||'USD',currency),bonus:0,regular:baseCash,offer:null,notes:[]});
+  if(cardBase.configured&&cardBase.unit==='percent')candidates.push({card:a,total:convert(spend*baseCash/100,a.cur||'USD',currency),bonus:0,regular:baseCash,offer:null,notes:[cardBase.source]});
+  if(!cardBase.configured)unknownCards.push(a.name);
   if(basePoints>0)points.push({card:a,basePoints:spend*basePoints,pointRate:basePoints,bonusPoints:0,offer:null,pending:false});
   for(const o of offers){
    if(spend<(Number(o.minimum)||0))continue;
-   const offerBase=crOfferBase(o,category),configured=offerBase.configured,regular=offerBase.cashback;
+   // Use the same resolved purchase category for every card and its merchant offers.
+   const offerBase=category?cardBase:crOfferBase(o),regular=offerBase.cashback;
    const pending=crNeedsActivation(o);
-   if(o.unit==='points'){
-    points.push({card:a,basePoints:spend*offerBase.points,pointRate:offerBase.points,bonusPoints:Number(o.value)||0,offer:o,pending});
-    continue;
-   }
+   if(o.unit==='points'){points.push({card:a,basePoints:spend*offerBase.points,pointRate:offerBase.points,bonusPoints:Number(o.value)||0,offer:o,pending});continue;}
    let bonus=o.unit==='cash'?Number(o.value)||0:spend*(Number(o.value)||0)/100;
    const cap=Number(o.cap)||0,capped=cap>0&&bonus>cap;if(cap>0)bonus=Math.min(bonus,cap);
    const notes=[];if(capped)notes.push('Merchant cashback cap applied');
-   if(!configured)notes.push('Regular reward not configured; using 0% cash back');if(offerBase.points)notes.push('Also earns '+offerBase.points+' regular points per account-currency unit; no cash valuation applied');
+   if(!offerBase.configured)notes.push('Regular reward not configured; merchant cashback only');
+   if(offerBase.points)notes.push('Also earns '+offerBase.points+' regular points per account-currency unit; no cash valuation applied');
+   if(category&&o.category&&crMatch(o.category)!==category)notes.push('Using selected purchase category: '+resolved.category);
    if(o.details)notes.push('Check offer conditions');
    const row={card:a,total:convert(bonus+spend*regular/100,a.cur||'USD',currency),bonus:convert(bonus,a.cur||'USD',currency),regular,offer:o,notes};
    (pending?activation:candidates).push(row);
@@ -1641,13 +1664,14 @@ function crCalculatePurchase(p){
  }
  const rank=(x,y)=>y.total-x.total||crAlpha(x.offer?.to||'9999',y.offer?.to||'9999')||crAlpha(x.card.name,y.card.name);
  ready.sort(rank);activation.sort(rank);points.sort((x,y)=>crAlpha(x.card.name,y.card.name));
- return {ready,activation,points,amount,currency};
+ return {ready,activation,points,amount,currency,merchant:resolved.merchant,category:resolved.category,explanation:resolved.explanation,unknownCards};
 }
+
 function crPurchaseResults(){const target=$('crPurchaseResults');if(!target)return;if(!crPurchase.submitted){target.innerHTML='';return;}
- const r=crCalculatePurchase(crPurchase);if(r.error){target.textContent=r.error;return;}
+ const r=crCalculatePurchase(crPurchase);if(r.error){target.textContent=r.error;return;}if($('crPurchaseMerchant'))$('crPurchaseMerchant').value=r.merchant;if($('crPurchaseCategory'))$('crPurchaseCategory').value=r.category;
  const n=x=>Number(x.toFixed(2)).toLocaleString();
  const row=(x,i,conditional=false)=>`<article class="cr-purchase-result ${!conditional&&i===0?'cr-purchase-best':''}"><div><span class="badge">${conditional?'Needs activation':i===0?'Best estimated cash back':'Alternative'}</span><h3>${escapeHtml(x.card.name)}</h3><p>${x.offer?'Merchant offer + '+n(x.regular)+'% regular':'Saved category rate: '+n(x.regular)+'%'}</p><small>${x.bonus?money(x.bonus,r.currency)+' merchant reward · ':''}${money(x.total-x.bonus,r.currency)} regular reward${x.offer?.to?' · Expires '+crDate(x.offer.to):''}</small>${x.notes.length?`<small>${escapeHtml(x.notes.join(' · '))}</small>`:''}</div><div class="cr-purchase-value"><strong>${money(x.total,r.currency)}</strong><span>${n(x.total/r.amount*100)}% effective</span>${btn('View card',`crOpenCard('${x.card.id}')`)}</div></article>`;
- target.innerHTML=`<p class="acct-meta">Same purchase: ${money(r.amount,r.currency)}${crPurchase.merchant?' · '+escapeHtml(crPurchase.merchant):''}${crPurchase.category?' · '+escapeHtml(crPurchase.category):''}. Current offers only; highest single eligible cash offer per card, without stacking multiple merchant offers.</p>${r.ready.length?r.ready.map((x,i)=>row(x,i)).join(''):'<p>No eligible cash-back result from the saved rates and offers. Add a category rate or a matching merchant offer.</p>'}${r.activation.length?'<details class="cr-purchase-conditional"><summary>Offers requiring activation ('+r.activation.length+')</summary>'+r.activation.map((x,i)=>row(x,i,true)).join('')+'</details>':''}${r.points.length?'<details class="cr-purchase-conditional"><summary>Points rewards — shown separately</summary>'+r.points.map(x=>`<article class="cr-purchase-result"><div><h3>${escapeHtml(x.card.name)}</h3><p>${x.basePoints?n(x.basePoints)+' estimated regular points ('+n(x.pointRate)+' per account-currency unit)':'Regular points rate not configured'}${x.bonusPoints?' · '+n(x.bonusPoints)+' merchant bonus points':''}</p>${x.pending?'<span class="cr-activation-badge">Needs activation</span>':''}</div>${btn('View card',`crOpenCard('${x.card.id}')`)}</article>`).join('')+'</details>':''}<p class="acct-meta">Estimates use saved rates and full offer caps; previous cap usage and conditions in notes are not automatically checked. Review eligibility before paying.</p>`;
+ target.innerHTML=`<p class="acct-meta">Same purchase: ${money(r.amount,r.currency)}${r.merchant?' · Merchant: '+escapeHtml(r.merchant):''}${r.category?' · Category: '+escapeHtml(r.category):''}. Every configured card is compared with its regular rewards plus the highest single eligible merchant offer.</p>${r.explanation?'<p class="acct-meta">'+escapeHtml(r.explanation)+'</p>':''}${r.unknownCards.length?'<p class="acct-meta">Regular rate not configured for: '+escapeHtml(r.unknownCards.join(', '))+'.</p>':''}${r.ready.length?r.ready.map((x,i)=>row(x,i)).join(''):'<p>No eligible cash-back result from the saved rates and offers. Add a category rate or a matching merchant offer.</p>'}${r.activation.length?'<details class="cr-purchase-conditional"><summary>Offers requiring activation ('+r.activation.length+')</summary>'+r.activation.map((x,i)=>row(x,i,true)).join('')+'</details>':''}${r.points.length?'<details class="cr-purchase-conditional"><summary>Points rewards — shown separately</summary>'+r.points.map(x=>`<article class="cr-purchase-result"><div><h3>${escapeHtml(x.card.name)}</h3><p>${x.basePoints?n(x.basePoints)+' estimated regular points ('+n(x.pointRate)+' per account-currency unit)':'Regular points rate not configured'}${x.bonusPoints?' · '+n(x.bonusPoints)+' merchant bonus points':''}</p>${x.pending?'<span class="cr-activation-badge">Needs activation</span>':''}</div>${btn('View card',`crOpenCard('${x.card.id}')`)}</article>`).join('')+'</details>':''}<p class="acct-meta">Estimates use saved rates and full offer caps; previous cap usage and conditions in notes are not automatically checked. Review eligibility before paying.</p>`;
 }
 const crBeforePurchaseRender=crRender;
 crRender=function(){crBeforePurchaseRender();const root=$('view-card-rewards');if(!root)return;
