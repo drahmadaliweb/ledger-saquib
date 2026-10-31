@@ -283,6 +283,10 @@ body{background:#f2f4f0}.wrap{max-width:1320px;padding:32px 28px 80px}header.top
 .cr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:18px}.cr-best,.cr-offer,.cr-card{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surface-2)}.cr-best,.cr-offer{padding:20px}.cr-best h3,.cr-offer h3{margin:0 0 12px;font-size:17px}.cr-best p{margin:8px 0;color:var(--muted)}.cr-best strong,.cr-deal{color:var(--emerald);font-size:20px}.cr-offer-head{display:flex;justify-content:space-between;align-items:start;gap:10px}.cr-offer p{margin:10px 0;font-size:13px}.cr-offer small{color:var(--muted)}.cr-offer .controls{margin-top:16px}.cr-face{position:relative;padding:22px;color:white;min-height:190px;background:linear-gradient(125deg,#163f34,#438471);overflow:hidden}.cr-face:after{content:'';position:absolute;width:220px;height:220px;border:1px solid #ffffff22;border-radius:50%;right:-60px;top:-80px;pointer-events:none}.cr-tone-1{background:linear-gradient(125deg,#203c47,#52777b)}.cr-tone-2{background:linear-gradient(125deg,#30392e,#73805c)}.cr-face>span{font-size:10px;letter-spacing:.16em;opacity:.75}.cr-face h3{font-size:21px;margin:14px 0 20px;position:relative;z-index:1}.cr-chip{width:30px;height:23px;border-radius:5px;background:linear-gradient(120deg,#e5d7a5,#ab9254);float:right;border:1px solid #eee2b6}.cr-face-bottom{display:flex;justify-content:space-between;gap:12px}.cr-face-bottom small{font-size:11px;line-height:1.8;opacity:.9}.cr-face-bottom b{font-size:15px}.cr-card-body{padding:16px}.cr-rate{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:12px 0}.cr-rate:first-child{padding-top:0}.cr-rate small{display:block;color:var(--muted);font-size:11px;margin-top:4px}.cr-rate .btn-ghost{font-size:11px;padding:5px 7px;margin:2px}.cr-card-body>small{display:block;margin-top:12px;color:var(--muted)}#view-card-rewards details{margin-top:24px;border-top:1px solid var(--line);padding-top:16px}#view-card-rewards .btn-primary{width:auto}#view-card-rewards .compact-grid textarea{min-width:0}@media(max-width:600px){.cr-grid{grid-template-columns:1fr}.cr-face{min-height:180px}}
 
 </style>
+<style>
+.cr-clickable{cursor:pointer;transition:transform .18s,box-shadow .18s}.cr-clickable:hover{transform:translateY(-3px);box-shadow:0 12px 28px #19211f18}.cr-clickable:focus-visible{outline:3px solid var(--emerald);outline-offset:4px}.cr-open-hint{padding:12px 20px;color:var(--emerald);font-size:13px;font-weight:600}.cr-detail-top{display:flex;align-items:center;gap:20px;margin:20px 0}.cr-detail-top h2{margin:0;font-family:"Space Grotesk",sans-serif}.cr-detail-actions{margin-bottom:18px}.cr-detail-editor{margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}.cr-detail-editor[hidden]{display:none!important}.cr-merchant-winner{padding:12px 0;border-top:1px solid var(--line)}.cr-merchant-winner>strong{font-size:20px;color:var(--emerald)}#view-card-reward-detail .btn-primary{width:auto}@media(max-width:600px){.cr-detail-top{align-items:flex-start;flex-direction:column;gap:12px}}
+
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -1420,6 +1424,72 @@ function crEdit(kind,id){const rate=kind==='rate',row=(rate?extra.cardRewardRate
 function crRemove(kind,id,redeem=false){checkpoint();const key=kind==='rate'?'cardRewardRates':'cardMerchantOffers';extra[key]=extra[key].filter(r=>r.id!==id);save();renderAll();toast(redeem?'Offer redeemed and removed.':'Removed.');}
 const crPreviousRender=renderAll;renderAll=function(){crPreviousRender();crRender();};
 const crPreviousSetup=setupUpgrade;setupUpgrade=function(){crPreviousSetup();const view=document.createElement('div');view.id='view-card-rewards';view.className='view';document.querySelector('.wrap').appendChild(view);const tab=document.createElement('button');tab.dataset.view='card-rewards';tab.textContent='Cards & rewards';tab.onclick=()=>page('card-rewards');const acct=document.querySelector('.tabs [data-view="accounts"]');acct.after(tab);crRender();if(location.hash==='#card-rewards')page('card-rewards');};
+
+/* Card reward detail navigation */
+let crSelectedCard='';
+const crDetailInitialRoute=location.hash.slice(1);
+const crListRenderer=crRender;
+crRender=function(){
+  const detail=$('view-card-reward-detail');
+  // Remove old editors before the overview creates fresh ones with the same IDs.
+  if(detail)detail.replaceChildren();
+  crListRenderer();
+  const overview=$('view-card-rewards');if(!overview)return;
+  const cards=creditAccts(),tiles=[...overview.querySelectorAll('.cr-card')];
+  const rateEditor=$('crRateDetails'),offerEditor=$('crOfferDetails');
+  const selected=crCard(crSelectedCard);
+  const sortedOffers=extra.cardMerchantOffers.slice().sort((a,b)=>(a.to||'9999').localeCompare(b.to||'9999'));
+  const offerNodes=[...overview.querySelectorAll('.cr-offer')];
+  const selectedOffers=offerNodes.filter((node,i)=>sortedOffers[i]?.card===crSelectedCard).map(node=>node.cloneNode(true));
+  const selectedTile=tiles[cards.findIndex(a=>a.id===crSelectedCard)];
+  const rateContent=selectedTile?.querySelector('.cr-card-body')?.cloneNode(true);
+  if(rateContent)rateContent.querySelector(':scope > small')?.remove();
+  // Only the card faces appear in the overview. Editors belong to the card detail page.
+  tiles.forEach((tile,i)=>{
+    tile.querySelector('.cr-card-body')?.remove();
+    const face=tile.querySelector('.cr-face');
+    const hint=document.createElement('div');hint.className='cr-open-hint';hint.textContent='View rates & merchant offers →';tile.appendChild(hint);
+    tile.classList.add('cr-clickable');tile.setAttribute('role','button');tile.tabIndex=0;
+    const open=()=>crOpenCard(cards[i].id);tile.onclick=open;
+    tile.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}};
+  });
+  rateEditor?.remove();offerEditor?.remove();
+  // One merchant tile per merchant, with the highest current offer in each reward format.
+  const merchantGrid=overview.querySelectorAll(':scope > section')[1]?.querySelector('.cr-grid');
+  if(merchantGrid){
+    const current=extra.cardMerchantOffers.filter(o=>crCard(o.card)&&crActive(o));
+    const merchantGroups=new Map();current.forEach(o=>{const key=o.merchant.trim().toLowerCase();if(!merchantGroups.has(key))merchantGroups.set(key,[]);merchantGroups.get(key).push(o);});
+    merchantGrid.innerHTML=[...merchantGroups.values()].sort((a,b)=>a[0].merchant.localeCompare(b[0].merchant)).map(rows=>`<article class="cr-offer"><h3>${escapeHtml(rows[0].merchant)}</h3>${['percent','cash','points'].map(unit=>{const list=rows.filter(o=>o.unit===unit);if(!list.length)return '';const max=Math.max(...list.map(o=>o.value));return list.filter(o=>o.value===max).map(o=>`<div class="cr-merchant-winner"><strong>${unit==='percent'?o.value+'% back':unit==='cash'?money(o.value,crCard(o.card).cur)+' back':o.value.toLocaleString()+' bonus points'}</strong><p>${escapeHtml(crCard(o.card).name)}</p><small>${o.minimum?'Minimum spend '+money(o.minimum,crCard(o.card).cur):'No minimum entered'}${o.cap?' · Cap '+money(o.cap,crCard(o.card).cur):''}<br>Valid through ${crDate(o.to)}</small><div class="controls">${btn('View offer',`crOpenCard('${o.card}')`)}</div></div>`).join('');}).join('')}</article>`).join('')||'<p>No current merchant offers. Open a card below to add one.</p>';
+    const note=document.createElement('p');note.className='acct-meta';note.textContent='Highest listed offers per merchant and reward format. Compare minimum spend, reward caps, and conditions before choosing.';merchantGrid.before(note);
+  }
+  if(!selected||!detail)return;
+  detail.innerHTML=`<div class="cr-detail-top">${btn('← All cards',"page('card-rewards')")}<h2>${escapeHtml(selected.name)}</h2></div>`+card('Cash back & reward rates',`<div class="cr-detail-actions">${btn('+ Add reward rate',"crAddForCard('rate')",'btn-primary')}</div><div id="crDetailRates"></div><div id="crRateEditorSlot"></div>`)+card('Merchant offers',`<div class="cr-detail-actions">${btn('+ Add merchant offer',"crAddForCard('offer')",'btn-primary')}</div><div id="crDetailOffers" class="cr-grid"></div><div id="crOfferEditorSlot"></div>`);
+  if(rateContent)$('crDetailRates').appendChild(rateContent);
+  else $('crDetailRates').textContent='No reward rates yet.';
+  if(selectedOffers.length)selectedOffers.forEach(n=>$('crDetailOffers').appendChild(n));else $('crDetailOffers').innerHTML='<p>No merchant offers for this card yet.</p>';
+  $('crRateEditorSlot').appendChild(rateEditor);$('crOfferEditorSlot').appendChild(offerEditor);
+  for(const prefix of ['crRate','crOffer']){
+    const select=$(prefix+'Card');select.value=selected.id;select.disabled=true;select.closest('.field').hidden=true;
+    $(prefix+'Details').classList.add('cr-detail-editor');$(prefix+'Details').hidden=true;
+  }
+};
+function crOpenCard(id){page('card-reward-detail/'+encodeURIComponent(id));}
+function crAddForCard(kind){const prefix=kind==='rate'?'crRate':'crOffer',form=$(prefix+'Form');if(!form)return;form.reset();$(prefix+'Id').value='';$(prefix+'Card').value=crSelectedCard;const editor=$(prefix+'Details');editor.hidden=false;editor.open=true;editor.scrollIntoView({behavior:'smooth',block:'center'});}
+const crPriorEdit=crEdit;
+crEdit=function(kind,id){const row=(kind==='rate'?extra.cardRewardRates:extra.cardMerchantOffers).find(r=>r.id===id);if(!row)return;crOpenCard(row.card);const prefix=kind==='rate'?'crRate':'crOffer';$(prefix+'Details').hidden=false;crPriorEdit(kind,id);};
+const crPriorPage=page;
+page=function(name){
+  if(name.startsWith('card-reward-detail/')){
+    let id;try{id=decodeURIComponent(name.slice('card-reward-detail/'.length));}catch{return crPriorPage('card-rewards');}
+    if(!crCard(id))return crPriorPage('card-rewards');
+    crSelectedCard=id;crRender();crPriorPage('card-reward-detail');
+    history.replaceState(null,'','#card-reward-detail/'+encodeURIComponent(id));
+    document.querySelector('.tabs [data-view="card-rewards"]')?.classList.add('active');return;
+  }
+  crPriorPage(name);
+};
+const crDetailSetup=setupUpgrade;
+setupUpgrade=function(){crDetailSetup();const el=document.createElement('div');el.id='view-card-reward-detail';el.className='view';document.querySelector('.wrap').appendChild(el);crRender();if(crDetailInitialRoute.startsWith('card-reward-detail/'))page(crDetailInitialRoute);};
 
 window.__ledgerStart = () => { init(); setupUpgrade(); };
 window.__ledgerStore = store;
