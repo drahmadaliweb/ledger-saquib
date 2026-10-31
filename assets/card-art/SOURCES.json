@@ -1,0 +1,219 @@
+{
+  "description": "Issuer product artwork for personal card identification; original brands and artwork belong to their respective owners. Resized to WebP for compact display.",
+  "retrieved": "2026-10-31",
+  "cards": [
+    {
+      "id": "amex-blue-cash-preferred",
+      "name": "Amex Blue Cash Preferred",
+      "aliases": [
+        "Amex BCP",
+        "Blue Cash Preferred",
+        "American Express Blue Cash Preferred"
+      ],
+      "src": "./assets/card-art/amex-blue-cash-preferred.webp",
+      "source_page": "https://www.americanexpress.com/us/credit-cards/card/blue-cash-preferred/",
+      "source_image": "https://icm.aexp-static.com/acquisition/card-art/NUS000000264_480x304_straight_withname.png"
+    },
+    {
+      "id": "amex-delta-gold",
+      "name": "Amex Delta SkyMiles Gold",
+      "aliases": [
+        "Amex Delta Gold",
+        "Delta SkyMiles Gold"
+      ],
+      "src": "./assets/card-art/amex-delta-gold.webp",
+      "source_page": "https://www.americanexpress.com/us/credit-cards/card/delta-skymiles-gold-american-express-card/",
+      "source_image": "https://icm.aexp-static.com/acquisition/card-art/NUS000000385_480x304_straight_withname.png"
+    },
+    {
+      "id": "amex-delta-platinum",
+      "name": "Amex Delta SkyMiles Platinum",
+      "aliases": [
+        "Amex Delta Platinum",
+        "Delta SkyMiles Platinum"
+      ],
+      "src": "./assets/card-art/amex-delta-platinum.webp",
+      "source_page": "https://www.americanexpress.com/us/credit-cards/card/delta-skymiles-platinum-american-express-card/",
+      "source_image": "https://icm.aexp-static.com/acquisition/card-art/NUS000000384_480x304_straight_withname.png"
+    },
+    {
+      "id": "amex-delta-reserve",
+      "name": "Amex Delta SkyMiles Reserve",
+      "aliases": [
+        "Amex Delta Reserve",
+        "Delta SkyMiles Reserve"
+      ],
+      "src": "./assets/card-art/amex-delta-reserve.webp",
+      "source_page": "https://www.americanexpress.com/us/credit-cards/card/delta-skymiles-reserve-american-express-card/",
+      "source_image": "https://icm.aexp-static.com/acquisition/card-art/NUS000000383_480x304_straight_withname.png"
+    },
+    {
+      "id": "apple-card",
+      "name": "Apple Card · titanium",
+      "aliases": [
+        "Apple Card"
+      ],
+      "src": "./assets/card-art/apple-card.webp",
+      "source_page": "https://learn.applecard.apple/titanium",
+      "source_image": "https://learn.applecard.apple/mdsa/assets/storage/blobs/images/657221f503f8b3000786da35/en-us-large@1x.png"
+    },
+    {
+      "id": "bilt-blue",
+      "name": "Bilt Blue",
+      "aliases": [
+        "Bilt Blue"
+      ],
+      "src": "./assets/card-art/bilt-blue.webp",
+      "source_page": "https://www.bilt.com/card",
+      "source_image": "https://img.bilt.com/43819/1790799681-bilt-tahoe.webp?w=480"
+    },
+    {
+      "id": "bilt-obsidian",
+      "name": "Bilt Obsidian",
+      "aliases": [
+        "Bilt Obsidian"
+      ],
+      "src": "./assets/card-art/bilt-obsidian.webp",
+      "source_page": "https://www.bilt.com/card",
+      "source_image": "https://img.bilt.com/43819/1790799681-bilt-vail.webp?w=480"
+    },
+    {
+      "id": "bilt-palladium",
+      "name": "Bilt Palladium",
+      "aliases": [
+        "Bilt Palladium"
+      ],
+      "src": "./assets/card-art/bilt-palladium.webp",
+      "source_page": "https://www.bilt.com/card",
+      "source_image": "https://img.bilt.com/43819/1790799681-bilt-aspen.webp?w=480"
+    },
+    {
+      "id": "capital-one-savor",
+      "name": "Capital One Savor",
+      "aliases": [
+        "Capital One Savor",
+        "CapOne Savor",
+        "Savor"
+      ],
+      "src": "./assets/card-art/capital-one-savor.webp",
+      "source_page": "https://www.capitalone.com/credit-cards/cash-back/savor/",
+      "source_image": "https://ecm.capitalone.com/WCM/card/products/new-savor-card-art/mobile.png"
+    },
+    {
+      "id": "capital-one-savorone",
+      "name": "Capital One SavorOne",
+      "aliases": [
+        "Capital One SavorOne",
+        "CapOne SavorOne",
+        "SavorOne"
+      ],
+      "src": "./assets/card-art/capital-one-savorone.webp",
+      "source_page": "https://www.capitalone.com/credit-cards/cash-back/savor/",
+      "source_image": "https://ecm.capitalone.com/WCM/card/products/savorone-2025-cardart.png"
+    },
+    {
+      "id": "chase-freedom-flex",
+      "name": "Chase Freedom Flex",
+      "aliases": [
+        "Chase Freedom Flex",
+        "Freedom Flex"
+      ],
+      "src": "./assets/card-art/chase-freedom-flex.webp",
+      "source_page": "https://creditcards.chase.com/cash-back-credit-cards/freedom/flex",
+      "source_image": "https://creditcards.chase.com/content/dam/jpmc-marketplace/card-art/freedom_flex_card.png"
+    },
+    {
+      "id": "citi-custom-cash",
+      "name": "Citi Custom Cash",
+      "aliases": [
+        "Citi Custom Cash",
+        "Custom Cash"
+      ],
+      "src": "./assets/card-art/citi-custom-cash.webp",
+      "source_page": "https://www.citi.com/credit-cards/citi-custom-cash-credit-card",
+      "source_image": "https://aemapi.citi.com/content/dam/cfs/uspb/usmkt/cards/en/static/images/citi-custom-cash-credit-card/citi-custom-cash-credit-card_306x192.webp"
+    },
+    {
+      "id": "citi-double-cash",
+      "name": "Citi Double Cash",
+      "aliases": [
+        "Citi Double Cash",
+        "Double Cash"
+      ],
+      "src": "./assets/card-art/citi-double-cash.webp",
+      "source_page": "https://www.citi.com/credit-cards/citi-double-cash-credit-card",
+      "source_image": "https://aemapi.citi.com/content/dam/cfs/uspb/usmkt/cards/en/static/images/citi-double-cash-credit-card/citi-double-cash-credit-card_306x192.webp"
+    },
+    {
+      "id": "discover-it",
+      "name": "Discover it · blue",
+      "aliases": [
+        "Discover IT",
+        "Discover it Cash Back",
+        "Discover it Cashback"
+      ],
+      "src": "./assets/card-art/discover-it.webp",
+      "source_page": "https://www.discover.com/credit-cards/rewards-credit-cards/",
+      "source_image": "https://ecm.capitalone.com/WCM/dfs-card/products/itblue_card/rdesktop.png"
+    },
+    {
+      "id": "onepay-cashrewards",
+      "name": "OnePay CashRewards Mastercard",
+      "aliases": [
+        "OnePay CashRewards",
+        "OnePay CashRewards Mastercard"
+      ],
+      "src": "./assets/card-art/onepay-cashrewards.webp",
+      "source_page": "https://www.onepay.com/credit-card",
+      "source_image": "https://images.ctfassets.net/e3a511gf6wvh/4q2E4h4xqf6PiNMgTs2sFt/6f9711f8ebd2a200b53c2817a9071d4e/Image_Frame__10_.png?w=480&fm=webp"
+    },
+    {
+      "id": "rakuten-amex",
+      "name": "Rakuten American Express",
+      "aliases": [
+        "Rakuten Amex",
+        "Rakuten American Express"
+      ],
+      "src": "./assets/card-art/rakuten-amex.webp",
+      "source_page": "https://imprint.co/partners/rakuten",
+      "source_image": "https://framerusercontent.com/images/BWkm01H5QVGCdPfkvYR3j4AvEU.png?width=780&height=490"
+    },
+    {
+      "id": "robinhood-gold",
+      "name": "Robinhood Gold Card",
+      "aliases": [
+        "RH GC",
+        "Robinhood Gold",
+        "Robinhood Gold Card",
+        "RH Gold"
+      ],
+      "src": "./assets/card-art/robinhood-gold.webp",
+      "source_page": "https://robinhood.com/creditcard/",
+      "source_image": "https://cdn.robinhood.com/app_assets/credit-card/gold/web/robinhood-gold-card.png"
+    },
+    {
+      "id": "us-bank-cash-plus",
+      "name": "U.S. Bank Cash+",
+      "aliases": [
+        "US Bank Cash+",
+        "U.S. Bank Cash+",
+        "USB Cash+",
+        "USBank Cash+"
+      ],
+      "src": "./assets/card-art/us-bank-cash-plus.webp",
+      "source_page": "https://www.usbank.com/credit-cards/cash-plus-visa-signature-credit-card.html",
+      "source_image": "https://www.usbank.com/content/dam/usbank/en/images/illustrations/card-art/credit-cards/photo-cash-plus-signature-angle-left.png"
+    },
+    {
+      "id": "wells-fargo-autograph",
+      "name": "Wells Fargo Autograph",
+      "aliases": [
+        "WF Autograph",
+        "Wells Fargo Autograph"
+      ],
+      "src": "./assets/card-art/wells-fargo-autograph.webp",
+      "source_page": "https://creditcards.wellsfargo.com/autograph-visa-credit-card/",
+      "source_image": "https://creditcards.wellsfargo.com/rv/next/images/cards/autograph.webp?v=d0d9f1e"
+    }
+  ]
+}

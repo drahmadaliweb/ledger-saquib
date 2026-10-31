@@ -330,6 +330,89 @@ body{background:#f2f4f0}.wrap{max-width:1320px;padding:32px 28px 80px}header.top
 #crTrackingError{color:#b23b2e;font-size:13px}
 @media(max-width:650px){.cr-tracking-row{grid-template-columns:minmax(0,1fr) auto;gap:10px}.cr-tracking-row .controls{grid-column:1/-1}.cr-tracking-dialog{padding:18px}.cr-tracking-fields{grid-template-columns:1fr}}
 </style>
+<style>
+/* Compact rewards page and issuer artwork */
+#view-card-rewards.cr-dense-layout>.card,#view-card-reward-detail.cr-dense-layout>.card{margin:0 0 14px;border-radius:13px}
+#view-card-rewards.cr-dense-layout .card-h,#view-card-reward-detail.cr-dense-layout .card-h{padding:14px 16px 0}
+#view-card-rewards.cr-dense-layout .card-h h2,#view-card-reward-detail.cr-dense-layout .card-h h2{font-size:13px;letter-spacing:.03em}
+#view-card-rewards.cr-dense-layout .card-b,#view-card-reward-detail.cr-dense-layout .card-b{padding:12px 16px 16px}
+#view-card-rewards.cr-dense-layout .cr-grid{gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr));align-items:start}
+#view-card-rewards.cr-dense-layout p{line-height:1.45}
+#view-card-rewards.cr-dense-layout .acct-meta{font-size:12px}
+#view-card-rewards.cr-dense-layout button,#view-card-reward-detail.cr-dense-layout button{min-height:32px;font-size:12px;padding:7px 11px}
+#view-card-rewards.cr-dense-layout input,#view-card-rewards.cr-dense-layout select{min-height:36px;font-size:13px}
+#view-card-rewards.cr-dense-layout .cr-search-panel .card-b{padding:12px 16px}
+#view-card-rewards.cr-dense-layout .cr-search-form{display:flex;align-items:center;gap:12px}
+#view-card-rewards.cr-dense-layout .cr-search-form>label{font-size:12px;white-space:nowrap;margin:0}
+#view-card-rewards.cr-dense-layout .cr-search-controls{flex:1;min-width:0}
+#view-card-rewards.cr-dense-layout #crSearchStatus:empty{display:none}
+#view-card-rewards.cr-dense-layout #crSearchStatus{margin:7px 0 0;font-size:12px}
+#view-card-rewards.cr-dense-layout .cr-purchase-panel .compact-grid{gap:9px;margin:0 0 10px;grid-template-columns:1.2fr 1.2fr 1fr .65fr auto auto}
+#view-card-rewards.cr-dense-layout .cr-purchase-panel .field label{font-size:10px;letter-spacing:.05em;margin-bottom:5px}
+#view-card-rewards.cr-dense-layout .cr-purchase-panel .compact-grid button{min-height:36px}
+#view-card-rewards.cr-dense-layout #crPurchaseResults{gap:9px}
+#view-card-rewards.cr-dense-layout .cr-mini-result{padding:12px;gap:6px}
+#view-card-rewards.cr-dense-layout .cr-mini-numbers strong{font-size:23px}
+#view-card-rewards.cr-dense-layout .cr-merchant-group{padding:12px;border-radius:11px}
+#view-card-rewards.cr-dense-layout .cr-merchant-heading{gap:8px;margin-bottom:8px}
+#view-card-rewards.cr-dense-layout .cr-merchant-heading h3{font-size:15px;margin:0}
+#view-card-rewards.cr-dense-layout .cr-compact-offer{padding:10px;border-radius:9px}
+#view-card-rewards.cr-dense-layout .cr-compact-top strong{font-size:19px}
+#view-card-rewards.cr-dense-layout .cr-compact-top span{font-size:12px;margin-top:3px}
+#view-card-rewards.cr-dense-layout .cr-compact-breakdown,#view-card-rewards.cr-dense-layout .cr-compact-terms,#view-card-rewards.cr-dense-layout .cr-usage-note{font-size:11px;margin:6px 0;line-height:1.45}
+#view-card-rewards.cr-dense-layout .cr-compact-actions{gap:6px;margin-top:8px;flex-wrap:wrap}
+#view-card-rewards.cr-dense-layout .cr-compact-actions button{min-height:30px;padding:5px 9px}
+#view-card-rewards.cr-dense-layout details.cr-compare-alternatives{margin-top:8px;padding-top:8px}
+#view-card-rewards.cr-dense-layout .cr-compare-alternatives summary{font-size:11px}
+#view-card-rewards.cr-dense-layout .cr-category-section .cr-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,215px),1fr))}
+#view-card-rewards.cr-dense-layout .cr-best{padding:12px;border-radius:10px}
+#view-card-rewards.cr-dense-layout .cr-best h3{font-size:13px;margin:0 0 5px}
+#view-card-rewards.cr-dense-layout .cr-best p{font-size:11px;margin:4px 0;line-height:1.5}
+#view-card-rewards.cr-dense-layout .cr-best strong{font-size:17px}
+#view-card-rewards.cr-dense-layout .cr-best>small{font-size:10px}
+#view-card-rewards.cr-dense-layout details.cr-category-manager,#view-card-rewards.cr-dense-layout details.cr-compact-help{margin:0 0 10px;padding:0;border:0}
+#view-card-rewards.cr-dense-layout details.cr-category-manager{margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line)}
+#view-card-rewards.cr-dense-layout .cr-category-manager>summary,#view-card-rewards.cr-dense-layout .cr-compact-help>summary{font-size:11px}
+#view-card-rewards.cr-dense-layout .cr-shared-category-form{padding-top:10px;margin-top:0;border:0}
+#view-card-rewards.cr-dense-layout .cr-tracking-row{padding:10px 0;gap:12px;font-size:13px}
+#view-card-rewards.cr-dense-layout .cr-wallet-section .cr-grid{grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px}
+#view-card-rewards.cr-dense-layout .cr-art-card{padding:10px;border-radius:11px;background:var(--surface,#fff);transition:border-color .15s,box-shadow .15s}
+#view-card-rewards.cr-dense-layout .cr-art-card:hover{border-color:var(--emerald);box-shadow:0 3px 14px #163f3414}
+.cr-art-card:focus-visible{outline:3px solid var(--emerald);outline-offset:3px}
+.cr-art-thumb{height:105px;display:flex;align-items:center;justify-content:center;margin-bottom:9px;background:var(--surface-2,#f7f8f4);border-radius:8px;overflow:hidden}
+.cr-art-thumb img{max-width:94%;max-height:98px;object-fit:contain;display:block}
+.cr-art-unmatched{border:1px dashed var(--line-strong,#cdd5cc);background:transparent;color:var(--muted);text-align:center;font-size:11px;line-height:1.5}
+.cr-art-error{color:var(--muted);font-size:11px;text-align:center;padding:8px}
+.cr-art-error[hidden],.cr-art-thumb img[hidden],.cr-art-card[hidden]{display:none!important}
+.cr-art-info h3{font-size:13px;margin:0 0 9px;overflow-wrap:anywhere}
+.cr-art-balances{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}
+.cr-art-balances span{font-size:10px;color:var(--muted)}
+.cr-art-balances strong{display:block;margin-top:3px;color:var(--text,#192a23);font-size:13px;font-variant-numeric:tabular-nums}
+.cr-art-info>small{display:block;color:var(--muted);font-size:10px;border-top:1px solid var(--line);padding-top:7px}
+#view-card-reward-detail .cr-detail-top{flex-wrap:wrap;gap:12px;margin-bottom:10px}
+.cr-detail-art{display:flex;align-items:center;width:100px;max-height:70px;flex:none}
+.cr-detail-art img{width:100%;max-height:70px;object-fit:contain}
+#view-card-reward-detail details.cr-art-picker{border:0;margin:0 0 14px;padding:0}
+.cr-art-picker>summary{font-size:12px;color:var(--emerald)}
+#crArtForm{max-width:460px;margin-top:12px;padding:14px;background:var(--surface,#fff);border:1px solid var(--line);border-radius:12px}
+#crArtForm label{display:block;margin:10px 0 6px;font-size:12px}
+#crArtForm select,#crArtForm input{width:100%;box-sizing:border-box;font-size:13px}
+#crArtForm small{font-size:11px;color:var(--muted);line-height:1.5}
+.cr-art-preview{margin:12px 0;min-height:80px;display:flex;align-items:center;justify-content:center}
+.cr-art-preview img{max-width:180px;max-height:115px;object-fit:contain}
+#crArtMessage:empty{display:none}
+#view-card-reward-detail.cr-dense-layout #crDetailOffers{gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(100%,270px),1fr))}
+#view-card-reward-detail.cr-dense-layout .cr-offer{padding:14px;border-radius:11px}
+#view-card-reward-detail.cr-dense-layout .cr-offer h3{font-size:15px}
+#view-card-reward-detail.cr-dense-layout .cr-offer .cr-deal{font-size:19px}
+#view-card-reward-detail.cr-dense-layout .cr-shared-rate{padding:10px 0;gap:10px}
+@media(max-width:1000px){#view-card-rewards.cr-dense-layout .cr-purchase-panel .compact-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){#view-card-rewards.cr-dense-layout .card-b,#view-card-reward-detail.cr-dense-layout .card-b{padding:10px 12px 12px}#view-card-rewards.cr-dense-layout .card-h,#view-card-reward-detail.cr-dense-layout .card-h{padding:12px 12px 0}#view-card-rewards.cr-dense-layout .cr-search-form{display:block}#view-card-rewards.cr-dense-layout .cr-search-form>label{display:block;margin-bottom:6px}#view-card-rewards.cr-dense-layout .cr-purchase-panel .compact-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#view-card-rewards.cr-dense-layout .cr-wallet-section .cr-grid,#view-card-rewards.cr-dense-layout .cr-category-section .cr-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}#view-card-rewards.cr-dense-layout .cr-art-card{padding:8px}.cr-art-thumb{height:85px}.cr-art-thumb img{max-height:80px}.cr-art-info h3{font-size:12px}.cr-art-balances{flex-wrap:wrap}.cr-art-balances strong{font-size:12px}.cr-art-info>small span{display:none}#view-card-rewards.cr-dense-layout .cr-best{padding:10px}#view-card-rewards.cr-dense-layout .cr-best strong{font-size:15px}}
+@media(prefers-reduced-motion:reduce){.cr-art-card{transition:none!important}}
+
+#view-card-rewards.cr-dense-layout .cr-best details.cr-tied-cards{margin:5px 0 0;padding:0;border:0}
+.cr-tied-cards summary{font-size:11px}.cr-tied-cards small{display:block;font-size:11px;line-height:1.5;margin-top:6px;color:var(--muted)}
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -1859,6 +1942,30 @@ function crReopenUse(id){const u=crUses().find(u=>u.id===id);if(!u)return;checkp
 function crDeleteUse(id){if(!confirm('Remove this usage record? This releases its reserved cashback cap and may make the offer available again. Ledger transactions are unchanged.'))return;checkpoint();extra.cardOfferUses=crUses().filter(u=>u.id!==id);save();renderAll();toast('Usage record removed.');}
 const crBeforeUsageRender=crRender;
 crRender=function(){crBeforeUsageRender();crTrackingRender();};
+
+/* Compact rewards page with official card artwork */
+const crArtworkCatalog=[{"id":"amex-blue-cash-preferred","name":"Amex Blue Cash Preferred","aliases":["Amex BCP","Blue Cash Preferred","American Express Blue Cash Preferred"],"src":"./assets/card-art/amex-blue-cash-preferred.webp"},{"id":"amex-delta-gold","name":"Amex Delta SkyMiles Gold","aliases":["Amex Delta Gold","Delta SkyMiles Gold"],"src":"./assets/card-art/amex-delta-gold.webp"},{"id":"amex-delta-platinum","name":"Amex Delta SkyMiles Platinum","aliases":["Amex Delta Platinum","Delta SkyMiles Platinum"],"src":"./assets/card-art/amex-delta-platinum.webp"},{"id":"amex-delta-reserve","name":"Amex Delta SkyMiles Reserve","aliases":["Amex Delta Reserve","Delta SkyMiles Reserve"],"src":"./assets/card-art/amex-delta-reserve.webp"},{"id":"apple-card","name":"Apple Card · titanium","aliases":["Apple Card"],"src":"./assets/card-art/apple-card.webp"},{"id":"bilt-blue","name":"Bilt Blue","aliases":["Bilt Blue"],"src":"./assets/card-art/bilt-blue.webp"},{"id":"bilt-obsidian","name":"Bilt Obsidian","aliases":["Bilt Obsidian"],"src":"./assets/card-art/bilt-obsidian.webp"},{"id":"bilt-palladium","name":"Bilt Palladium","aliases":["Bilt Palladium"],"src":"./assets/card-art/bilt-palladium.webp"},{"id":"capital-one-savor","name":"Capital One Savor","aliases":["Capital One Savor","CapOne Savor","Savor"],"src":"./assets/card-art/capital-one-savor.webp"},{"id":"capital-one-savorone","name":"Capital One SavorOne","aliases":["Capital One SavorOne","CapOne SavorOne","SavorOne"],"src":"./assets/card-art/capital-one-savorone.webp"},{"id":"chase-freedom-flex","name":"Chase Freedom Flex","aliases":["Chase Freedom Flex","Freedom Flex"],"src":"./assets/card-art/chase-freedom-flex.webp"},{"id":"citi-custom-cash","name":"Citi Custom Cash","aliases":["Citi Custom Cash","Custom Cash"],"src":"./assets/card-art/citi-custom-cash.webp"},{"id":"citi-double-cash","name":"Citi Double Cash","aliases":["Citi Double Cash","Double Cash"],"src":"./assets/card-art/citi-double-cash.webp"},{"id":"discover-it","name":"Discover it · blue","aliases":["Discover IT","Discover it Cash Back","Discover it Cashback"],"src":"./assets/card-art/discover-it.webp"},{"id":"onepay-cashrewards","name":"OnePay CashRewards Mastercard","aliases":["OnePay CashRewards","OnePay CashRewards Mastercard"],"src":"./assets/card-art/onepay-cashrewards.webp"},{"id":"rakuten-amex","name":"Rakuten American Express","aliases":["Rakuten Amex","Rakuten American Express"],"src":"./assets/card-art/rakuten-amex.webp"},{"id":"robinhood-gold","name":"Robinhood Gold Card","aliases":["RH GC","Robinhood Gold","Robinhood Gold Card","RH Gold"],"src":"./assets/card-art/robinhood-gold.webp"},{"id":"us-bank-cash-plus","name":"U.S. Bank Cash+","aliases":["US Bank Cash+","U.S. Bank Cash+","USB Cash+","USBank Cash+"],"src":"./assets/card-art/us-bank-cash-plus.webp"},{"id":"wells-fargo-autograph","name":"Wells Fargo Autograph","aliases":["WF Autograph","Wells Fargo Autograph"],"src":"./assets/card-art/wells-fargo-autograph.webp"}];
+function crArtKey(value){return String(value||'').toLowerCase().replace(/\+/g,' plus ').replace(/[^a-z0-9]+/g,' ').trim();}
+function crArtChoice(account){const custom=extra.cardArtwork?.[account.id];if(custom){if(custom.id==='none')return null;if(custom.id==='custom'&&crArtURL(custom.url))return {id:'custom',name:'Custom card artwork',src:custom.url};const selected=crArtworkCatalog.find(x=>x.id===custom.id);if(selected)return selected;}return crArtworkCatalog.find(x=>x.aliases.some(alias=>crArtKey(alias)===crArtKey(account.name)))||null;}
+function crArtURL(value){try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password;}catch{return false;}}
+function crArtImage(art,cls=''){return `<img class="${cls}" src="${escapeHtml(art.src)}" alt="${escapeHtml(art.name)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span class="cr-art-error" hidden>Image unavailable · choose another image in card details</span>`;}
+function crArtPicker(){const root=$('view-card-reward-detail'),account=crCard(crSelectedCard);if(!root||!account)return;const top=root.querySelector('.cr-detail-top');if(!top||$('crArtPicker'))return;const art=crArtChoice(account),saved=extra.cardArtwork?.[account.id];const panel=document.createElement('details');panel.id='crArtPicker';panel.className='cr-art-picker';panel.innerHTML=`<summary>${art?'Change card image':'Choose exact card image'}</summary><form id="crArtForm"><label for="crArtSelect">Card design</label><select id="crArtSelect"><option value="auto">Match account name automatically</option>${crArtworkCatalog.map(x=>`<option value="${escapeHtml(x.id)}">${escapeHtml(x.name)}</option>`).join('')}<option value="custom">Use another official image URL</option><option value="none">Text only</option></select><div id="crArtCustomField" hidden><label for="crArtCustomURL">Official card image URL (HTTPS)</label><input id="crArtCustomURL" type="url" placeholder="https://…" maxlength="1500"><small>Use a public product image, without personal card information.</small></div><div id="crArtPreview" class="cr-art-preview"></div><p id="crArtMessage" role="status"></p><button class="btn-primary" type="submit">Save card image</button></form>`;top.after(panel);$('crArtSelect').value=saved?.id||'auto';$('crArtCustomURL').value=saved?.url||'';$('crArtSelect').onchange=crArtPreview;$('crArtCustomURL').oninput=crArtPreview;$('crArtForm').onsubmit=e=>{e.preventDefault();crSaveArtwork();};crArtPreview();if(art){const image=document.createElement('div');image.className='cr-detail-art';image.innerHTML=crArtImage(art);top.prepend(image);}}
+function crArtPreview(){const select=$('crArtSelect');if(!select)return;const custom=select.value==='custom';$('crArtCustomField').hidden=!custom;const account=crCard(crSelectedCard);const art=select.value==='auto'?crArtworkCatalog.find(x=>x.aliases.some(a=>crArtKey(a)===crArtKey(account?.name))):custom?(crArtURL($('crArtCustomURL').value)?{name:'Selected card image',src:$('crArtCustomURL').value}:null):crArtworkCatalog.find(x=>x.id===select.value);$('crArtPreview').innerHTML=art?crArtImage(art):'<small>No image selected. Choose the exact card variant above.</small>';}
+function crSaveArtwork(){const account=crCard(crSelectedCard),id=$('crArtSelect')?.value;if(!account)return;const url=$('crArtCustomURL')?.value.trim()||'';if(id==='custom'&&!crArtURL(url)){$('crArtMessage').textContent='Enter a valid public HTTPS image URL.';return;}if(!['auto','custom','none',...crArtworkCatalog.map(x=>x.id)].includes(id))return;checkpoint();extra.cardArtwork||={};if(id==='auto')delete extra.cardArtwork[account.id];else extra.cardArtwork[account.id]=id==='custom'?{id,url}:{id};save();renderAll();toast('Card image saved.');}
+function crCompactWallet(){const root=$('view-card-rewards');if(!root)return;const cards=creditAccts().slice().sort((a,b)=>crAlpha(a.name,b.name));root.querySelectorAll('.cr-card').forEach((tile,i)=>{const a=cards[i];if(!a)return;const art=crArtChoice(a);tile.classList.add('cr-art-card');tile.setAttribute('aria-label',a.name+' — view rates and offers');tile.innerHTML=`<div class="cr-art-thumb ${art?'':'cr-art-unmatched'}">${art?crArtImage(art):'<span>Choose exact card image<br>in card details</span>'}</div><div class="cr-art-info"><h3>${escapeHtml(a.name)}</h3><div class="cr-art-balances"><span>Balance<strong>${money(a.balance,a.cur)}</strong></span><span>Points<strong>${Math.round(a.rewards||0).toLocaleString()}</strong></span></div><small>${extra.cardMerchantOffers.filter(o=>o.card===a.id&&crActive(o)).length} active offer${extra.cardMerchantOffers.filter(o=>o.card===a.id&&crActive(o)).length===1?'':'s'} <span aria-hidden="true">· View details →</span></small></div>`;});}
+function crCompactHelp(section){const body=section.querySelector(':scope > .card-b');if(!body||body.querySelector(':scope > .cr-compact-help'))return;const paragraphs=[...body.children].filter(x=>x.tagName==='P'&&x.classList.contains('acct-meta')&&!x.id);if(!paragraphs.length)return;const help=document.createElement('details');help.className='cr-compact-help';help.innerHTML='<summary>How this works</summary>';paragraphs[0].before(help);paragraphs.forEach(p=>help.appendChild(p));}
+function crCompactRewardsLayout(){const root=$('view-card-rewards'),detail=$('view-card-reward-detail');if(!root)return;root.classList.add('cr-dense-layout');detail?.classList.add('cr-dense-layout');for(const section of root.querySelectorAll(':scope > section')){const title=section.querySelector('.card-h h2')?.textContent.trim();if(title==='Your credit cards')section.classList.add('cr-wallet-section');if(title==='Best rewards by category'){section.classList.add('cr-category-section');crCompactHelp(section);}if(title==='Merchant offers'){section.classList.add('cr-merchants-section');crCompactHelp(section);}if(title==='Cashback tracking'){section.classList.add('cr-tracker-section');crCompactHelp(section);}}
+ const form=$('crSharedCategoryForm');if(form&&!form.closest('.cr-category-manager')){const wrapper=document.createElement('details');wrapper.className='cr-category-manager';wrapper.innerHTML='<summary>Add a shared category</summary>';form.before(wrapper);wrapper.appendChild(form);}
+ const search=$('crRewardsSearch');if(search){search.placeholder='Find merchants, categories or cards…';const label=root.querySelector('label[for="crRewardsSearch"]');if(label)label.textContent='Search cards & rewards';}
+ crCompactWallet();crArtPicker();crCompactCategoryTies();crCompactWalletFilter();
+}
+function crCompactWalletFilter(){const root=$('view-card-rewards');if(!root)return;const term=String(crSearchQuery||'').trim().toLocaleLowerCase();root.querySelectorAll('.cr-art-card').forEach(tile=>{tile.hidden=!!term&&!String(tile.querySelector('h3')?.textContent||'').toLocaleLowerCase().includes(term);});let message=$('crNoWalletMatches');const grid=root.querySelector('.cr-wallet-section .cr-grid');if(grid&&!message){message=document.createElement('p');message.id='crNoWalletMatches';message.className='acct-meta';message.textContent='No matching cards.';grid.after(message);}if(message)message.hidden=!term||!![...root.querySelectorAll('.cr-art-card')].find(x=>!x.hidden);const status=$('crSearchStatus');if(status&&term){const count=[...root.querySelectorAll('.cr-art-card')].filter(x=>!x.hidden).length;status.textContent=status.textContent.replace(/ · \d+ matching cards?$/,'')+' · '+count+' matching '+(count===1?'card':'cards');}}
+const crBeforeDenseSearch=crApplySearch;
+crApplySearch=function(){crBeforeDenseSearch();crCompactWalletFilter();};
+const crBeforeDenseRender=crRender;
+crRender=function(){crBeforeDenseRender();crCompactRewardsLayout();};
+
+function crCompactCategoryTies(){const root=$('view-card-rewards');if(!root)return;root.querySelectorAll('.cr-best p').forEach(p=>{const br=p.querySelector('br');if(!br)return;const after=[];let node=br.nextSibling;while(node){after.push(node);node=node.nextSibling;}const names=after.map(n=>n.textContent).join('');if(!names.includes(' / '))return;const disclosure=document.createElement('details');disclosure.className='cr-tied-cards';disclosure.innerHTML='<summary>View tied cards</summary>';const text=document.createElement('small');text.textContent=names;disclosure.appendChild(text);after.forEach(n=>n.remove());br.remove();p.after(disclosure);});}
 
 window.__ledgerStart = () => { init(); setupUpgrade(); };
 window.__ledgerStore = store;
