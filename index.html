@@ -313,6 +313,23 @@ body{background:#f2f4f0}.wrap{max-width:1320px;padding:32px 28px 80px}header.top
 @media(max-width:600px){#crPurchaseResults{grid-template-columns:1fr}.cr-purchase-panel .cr-mini-result{gap:7px;padding:12px}}
 </style>
 <style>.cr-ai-import{margin-bottom:18px;padding:16px;border:1px dashed var(--line-strong);border-radius:12px;background:var(--surface-2)}.cr-ai-import summary{font-weight:600}.cr-ai-import .controls{flex-wrap:wrap}.cr-ai-import input[type=file]{max-width:100%}.cr-ai-drafts article{border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:12px;background:var(--surface)}.cr-ai-drafts h4{margin:0 0 8px}.cr-ai-drafts p{font-size:12px;white-space:pre-wrap}.cr-ai-warning{color:var(--danger)}#crOfferAIStatus{font-size:13px;white-space:pre-wrap}</style>
+<style>
+/* Merchant cashback tracking */
+.cr-usage-note{font-size:12px;line-height:1.5;color:var(--muted);margin:8px 0}
+.cr-tracking-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.cr-tracking-toolbar p{margin:0}.cr-tracking-toolbar label{font-size:13px}
+.cr-tracking-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:18px;padding:14px 0;border-bottom:1px solid var(--line,#e1e6df)}
+.cr-tracking-row:last-child{border:0}.cr-tracking-row small{display:block;color:var(--muted);margin-top:5px;font-size:12px}.cr-tracking-row strong{overflow-wrap:anywhere}
+.cr-tracking-row .controls{margin:0}.cr-tracking-row button,.cr-compact-actions button{font-size:12px;padding:7px 10px}
+.cr-tracking-overlay{position:fixed;inset:0;background:rgba(12,34,28,.5);z-index:10050;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto}
+.cr-tracking-dialog{background:var(--surface,#fff);color:var(--text,#182620);border-radius:18px;padding:24px;max-width:600px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 18px 70px #102d2440}
+.cr-tracking-dialog h2{margin:0 0 16px;font-size:22px}.cr-tracking-dialog label{display:block;font-size:13px;margin:12px 0}
+.cr-tracking-dialog input:not([type=checkbox]),.cr-tracking-dialog select{display:block;width:100%;margin-top:6px;box-sizing:border-box}
+.cr-tracking-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
+.cr-tracking-dialog .cr-tracking-check{display:flex;align-items:center;gap:8px}.cr-tracking-check input{width:auto;flex:none}
+#crTrackingError{color:#b23b2e;font-size:13px}
+@media(max-width:650px){.cr-tracking-row{grid-template-columns:minmax(0,1fr) auto;gap:10px}.cr-tracking-row .controls{grid-column:1/-1}.cr-tracking-dialog{padding:18px}.cr-tracking-fields{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -1441,7 +1458,7 @@ function crOfferCalculation(o){
  if(spend>0){
   if(spend<(Number(o.minimum)||0))return {rate:null,total:null,spend,regular,ineligible:true};
   let bonus=o.unit==='cash'?value:spend*value/100;
-  if(Number(o.cap)>0)bonus=Math.min(bonus,Number(o.cap));
+  const remaining=crRemainingOfferCap(o);if(remaining!==null)bonus=Math.min(bonus,remaining);
   const total=bonus+spend*regular/100;
   return {rate:total/spend*100,total,spend,regular};
  }
@@ -1672,8 +1689,8 @@ function crCalculatePurchase(p){
    const pending=crNeedsActivation(o);
    if(o.unit==='points'){points.push({card:a,basePoints:spend*offerBase.points,pointRate:offerBase.points,bonusPoints:Number(o.value)||0,offer:o,pending});continue;}
    let bonus=o.unit==='cash'?Number(o.value)||0:spend*(Number(o.value)||0)/100;
-   const cap=Number(o.cap)||0,capped=cap>0&&bonus>cap;if(cap>0)bonus=Math.min(bonus,cap);
-   const notes=[];if(capped)notes.push('Merchant cashback cap applied');
+   const cap=crRemainingOfferCap(o),capped=cap!==null&&bonus>cap;if(cap!==null)bonus=Math.min(bonus,cap);
+   const notes=[];if(capped)notes.push('Remaining merchant cashback cap applied');
    if(!offerBase.configured)notes.push('Regular reward not configured; merchant cashback only');
    if(offerBase.points)notes.push('Also earns '+offerBase.points+' regular points per account-currency unit; no cash valuation applied');
    if(category&&o.category&&crMatch(o.category)!==category)notes.push('Using selected purchase category: '+resolved.category);
@@ -1790,6 +1807,58 @@ crSave=function(kind){if(kind!=='offer'||crOfferAI.loaded<0)return crBeforeAIRev
 
 const crBeforeAIAdd=crAddForCard;crAddForCard=function(kind){if(kind==='offer')crOfferAI.loaded=-1;crBeforeAIAdd(kind);};
 const crBeforeAIEdit=crEdit;crEdit=function(kind,id){crOfferAI.loaded=-1;crBeforeAIEdit(kind,id);};
+
+/* Merchant offer usage and cashback tracking */
+function crUses(){if(!Array.isArray(extra.cardOfferUses))extra.cardOfferUses=[];return extra.cardOfferUses;}
+function crUsedOffer(o){return crUses().some(u=>u.offerId===o.id&&!u.allowMore);}
+function crRemainingOfferCap(o){
+ if(o.unit==='points')return null;
+ const budget=Number(o.cap)>0?Number(o.cap):o.unit==='cash'?Number(o.value):null;
+ if(budget===null)return null;
+ const reserved=crUses().filter(u=>u.offerId===o.id).reduce((n,u)=>n+Math.max(0,Number(u.status==='received'?u.actual:u.expected)||0),0);
+ return Math.max(0,Math.round((budget-reserved)*100)/100);
+}
+const crBeforeUsageActive=crActive;
+crActive=function(o){return crBeforeUsageActive(o)&&(!(extra.cardMerchantOffers||[]).includes(o)||(!crUsedOffer(o)&&(crRemainingOfferCap(o)===null||crRemainingOfferCap(o)>0)));};
+function crUsageNote(o){const cap=crRemainingOfferCap(o),a=crCard(o.card),uses=crUses().filter(u=>u.offerId===o.id),pending=uses.filter(u=>u.status==='pending').length;return `<p class="cr-usage-note">${crUsedOffer(o)?'Marked used · ':''}${cap!==null?'Merchant cashback remaining: <strong>'+money(cap,a?.cur||'USD')+'</strong> · ':''}${pending?pending+' pending '+(pending===1?'credit':'credits')+' · ':''}${uses.length?'Usage tracked':'Mark used after making a qualifying purchase'}</p>`;}
+const crBeforeUsageBox=crOfferBox;
+crOfferBox=function(o,summary=false){let html=crBeforeUsageBox(o,summary).replace('>Redeem</button>','>Mark used</button>');if(crUsedOffer(o)||crRemainingOfferCap(o)===0)html=html.replace('>Active</span>','>'+(crUsedOffer(o)?'Used':'Cap reserved / exhausted')+'</span>');if(!crActive(o)||crNeedsActivation(o))html=html.replace(/<button[^>]*onclick="crRemove\('offer','[^']*',true\)"[^>]*>.*?<\/button>/,'');return html.replace('<div class="controls">',crUsageNote(o)+'<div class="controls">');};
+const crBeforeUsageCompact=crCompactOffer;
+crCompactOffer=function(o,first){return crBeforeUsageCompact(o,first).replace('<div class="cr-compact-actions">',crUsageNote(o)+'<div class="cr-compact-actions">'+(!crNeedsActivation(o)?btn('Mark used',`crUseOffer('${o.id}')`,'btn-primary'):''));};
+const crBeforeUsageRemove=crRemove;
+crRemove=function(kind,id,redeem=false){if(kind==='offer'&&redeem)return crUseOffer(id);return crBeforeUsageRemove(kind,id,redeem);};
+function crTrackingClose(){ $('crTrackingModal')?.remove();document.removeEventListener('keydown',crTrackingEscape);const target=window.crTrackingFocus;if(target?.isConnected)target.focus();}
+function crTrackingEscape(e){if(e.key==='Escape')crTrackingClose();if(e.key==='Tab'){const modal=$('crTrackingModal'),nodes=[...modal.querySelectorAll('button,input,select,textarea,[tabindex="0"]')].filter(el=>!el.disabled&&!el.hidden);const first=nodes[0],last=nodes[nodes.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}}
+function crTrackingModal(title,body){crTrackingClose();window.crTrackingFocus=document.activeElement;const el=document.createElement('div');el.id='crTrackingModal';el.className='cr-tracking-overlay';el.innerHTML=`<section class="cr-tracking-dialog" role="dialog" aria-modal="true" aria-labelledby="crTrackingTitle"><h2 id="crTrackingTitle">${escapeHtml(title)}</h2>${body}</section>`;el.addEventListener('click',e=>{if(e.target===el)crTrackingClose();});document.body.appendChild(el);document.addEventListener('keydown',crTrackingEscape);el.querySelector('input,button')?.focus();}
+function crUseOffer(id){
+ const o=extra.cardMerchantOffers.find(o=>o.id===id),a=o&&crCard(o.card);if(!a||!crActive(o))return toast('This offer is no longer available.');if(crNeedsActivation(o))return toast('Activate the offer first.');
+ crTrackingModal('Mark offer used',`<p><strong>${escapeHtml(o.merchant)}</strong> · ${escapeHtml(a.name)}</p>${crUsageNote(o)}<p class="acct-meta">Record a qualifying purchase already made. This tracks the merchant reward; it does not add a transaction or change account balances.</p><form id="crUseForm" data-offer="${escapeHtml(id)}"><div class="cr-tracking-fields"><label>Purchase date<input id="crUseDate" type="date" value="${localDay()}" required></label><label>Qualifying purchase (${escapeHtml(a.cur||'USD')})<input id="crUseAmount" type="number" step="0.01" min="0.01" value="${Number(o.estimateSpend)>0?Number(o.estimateSpend):''}" required></label><label>Expected merchant ${o.unit==='points'?'bonus points':'cashback'}<input id="crUseExpected" type="number" step="${o.unit==='points'?'1':'0.01'}" min="0" required></label></div><p id="crUseEstimate" class="acct-meta" role="status"></p><label class="cr-tracking-check"><input id="crUseRepeat" type="checkbox"> Terms allow this offer to be used again</label><p class="acct-meta">Leave unchecked for a one-time offer. Pending rewards reserve the merchant cap. Regular card rewards are separate.</p><p id="crTrackingError" role="alert"></p><div class="controls"><button class="btn-primary" type="submit">Save as pending</button><button class="btn-ghost" type="button" onclick="crTrackingClose()">Cancel</button></div></form>`);
+ $('crUseAmount').addEventListener('input',crUseEstimate);$('crUseForm').addEventListener('submit',e=>{e.preventDefault();crSaveUse();});crUseEstimate();
+}
+function crUseEstimate(){const o=extra.cardMerchantOffers.find(o=>o.id===$('crUseForm')?.dataset.offer);if(!o)return;const amount=Number($('crUseAmount').value),remaining=crRemainingOfferCap(o);let bonus=o.unit==='percent'?amount*Number(o.value)/100:Number(o.value);if(remaining!==null)bonus=Math.min(bonus,remaining);$('crUseExpected').value=Number(Math.max(0,bonus).toFixed(o.unit==='points'?0:2));const regular=crOfferBase(o);$('crUseEstimate').textContent=amount<(Number(o.minimum)||0)?'This purchase is below the saved minimum.':regular.cashback?'Regular rewards estimated separately: '+money(amount*regular.cashback/100,crCard(o.card)?.cur||'USD'):regular.points?'Regular points estimated separately: '+Math.floor(amount*regular.points):'Check eligibility and adjust the expected merchant reward if needed.';}
+function crTrackingError(message){$('crTrackingError').textContent=message;}
+function crSaveUse(){
+ const o=extra.cardMerchantOffers.find(o=>o.id===$('crUseForm')?.dataset.offer),a=o&&crCard(o.card);if(!a||!crActive(o)||crNeedsActivation(o))return crTrackingError('Offer availability changed. Close and try again.');
+ const amount=Number($('crUseAmount').value),expected=Number($('crUseExpected').value),date=$('crUseDate').value,remaining=crRemainingOfferCap(o);
+ if(!validDate(date)||date>localDay()||(o.from&&date<o.from)||(o.to&&date>o.to))return crTrackingError('Choose a purchase date within the offer dates, no later than today.');
+ if(!Number.isFinite(amount)||amount<=0||amount<(Number(o.minimum)||0))return crTrackingError('Enter a qualifying purchase that meets the minimum spend.');
+ if($('crUseExpected').value===''||!Number.isFinite(expected)||expected<0||(o.unit==='points'&&!Number.isInteger(expected))||(remaining!==null&&expected>remaining+0.00001))return crTrackingError('Enter a valid reward within the remaining merchant cap.');
+ checkpoint();crUses().push({id:uid(),offerId:o.id,cardId:a.id,cardName:a.name,merchant:o.merchant,category:o.category||'',currency:a.cur||'USD',unit:o.unit==='points'?'points':'cash',purchaseAmount:amount,date,expected,status:'pending',allowMore:$('crUseRepeat').checked,terms:{unit:o.unit,value:o.value,cap:o.cap,from:o.from,to:o.to}});save();crTrackingClose();renderAll();toast('Offer use saved. Reward is pending.');
+}
+let crTrackingFilter='pending';
+function crTrackingReward(u,value){return u.unit==='points'?Number(value).toLocaleString()+' points':money(value,u.currency||'USD');}
+function crTrackingRender(){
+ const root=$('view-card-rewards');if(!root)return;root.querySelector('#crCashbackTracking')?.remove();const uses=crUses(),pending=uses.filter(u=>u.status==='pending'),rows=uses.filter(u=>crTrackingFilter==='all'||u.status===crTrackingFilter).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')||crAlpha(a.merchant,b.merchant));
+ const totals=new Map();pending.filter(u=>u.unit!=='points').forEach(u=>totals.set(u.currency,(totals.get(u.currency)||0)+u.expected));const summary=[...totals].map(([cur,v])=>money(v,cur)).join(' + ');
+ const wrap=document.createElement('div');wrap.innerHTML=card('Cashback tracking',`<div class="cr-tracking-toolbar"><p class="acct-meta">${pending.length} pending ${pending.length===1?'reward':'rewards'}${summary?' · '+summary+' expected merchant cashback':''}</p><label>Show <select id="crTrackingFilter" onchange="crTrackingFilter=this.value;crTrackingRender()"><option value="pending" ${crTrackingFilter==='pending'?'selected':''}>Pending</option><option value="received" ${crTrackingFilter==='received'?'selected':''}>Received</option><option value="all" ${crTrackingFilter==='all'?'selected':''}>All</option></select></label></div><p class="acct-meta">Tracking does not create ledger credits or change balances. Link an existing credit when it arrives.</p><div class="cr-tracking-list">${rows.length?rows.map(u=>`<article class="cr-tracking-row"><div><strong>${escapeHtml(u.merchant)}</strong><small>${escapeHtml(crCard(u.cardId)?.name||u.cardName)} · Purchase ${escapeHtml(u.date)} · ${money(u.purchaseAmount,u.currency)}</small><small>${u.status==='received'?'Received '+escapeHtml(u.receivedDate||'')+(u.linkedTransactionId?' · Linked to a ledger credit':''):'Pending merchant reward'}</small></div><div><strong>${crTrackingReward(u,u.status==='received'?u.actual:u.expected)}</strong>${u.status==='received'&&u.actual!==u.expected?'<small>Expected '+crTrackingReward(u,u.expected)+'</small>':''}</div><div class="controls">${u.status==='received'?btn('Reopen',`crReopenUse('${u.id}')`):btn('Mark received',`crReceiveUse('${u.id}')`,'btn-primary')}${btn('Remove',`crDeleteUse('${u.id}')`)}</div></article>`).join(''):'<p class="acct-meta">No '+(crTrackingFilter==='all'?'tracked':crTrackingFilter)+' rewards. Use “Mark used” on an offer after a qualifying purchase.</p>'}</div>`);const section=wrap.firstElementChild;section.id='crCashbackTracking';const merchant=[...root.children].find(el=>el.querySelector('h2')?.textContent.trim().toLowerCase()==='merchant offers');if(merchant)merchant.after(section);else root.appendChild(section);
+}
+function crLinkableCredits(u){const linked=new Set(crUses().filter(x=>x.id!==u.id).map(x=>x.linkedTransactionId).filter(Boolean));return data.filter(t=>(t.kind==='refund'||t.kind==='income')&&t.p===(crCard(u.cardId)?.name||u.cardName)&&(t.cur||'USD')===u.currency&&Number(t.a)>0&&!linked.has(t.id));}
+function crReceiveUse(id){const u=crUses().find(u=>u.id===id);if(!u||u.status!=='pending')return;const credits=u.unit==='points'?[]:crLinkableCredits(u);crTrackingModal('Mark reward received',`<p><strong>${escapeHtml(u.merchant)}</strong> · ${escapeHtml(u.cardName)}</p><form id="crReceiveForm" data-use="${escapeHtml(id)}"><div class="cr-tracking-fields"><label>Received date<input id="crReceivedDate" type="date" value="${localDay()}" required></label><label>Actual ${u.unit==='points'?'bonus points':'merchant cashback'}<input id="crReceivedActual" type="number" step="${u.unit==='points'?'1':'0.01'}" min="0" value="${u.expected}" required></label></div>${u.unit==='points'?'':`<label>Link existing ledger credit (optional)<select id="crReceivedLink"><option value="">No linked credit</option>${credits.map(t=>`<option value="${escapeHtml(t.id)}">${escapeHtml(t.d+' · '+(t.t||t.kind)+' · '+money(t.a,t.cur))}</option>`).join('')}</select></label>`}<p class="acct-meta">Enter only the merchant bonus, excluding regular rewards. Linking records a reference; it does not add a credit or change any ledger balance.</p><p id="crTrackingError" role="alert"></p><div class="controls"><button type="submit" class="btn-primary">Mark received</button><button type="button" class="btn-ghost" onclick="crTrackingClose()">Cancel</button></div></form>`);$('crReceiveForm').addEventListener('submit',e=>{e.preventDefault();crSaveReceived();});}
+function crSaveReceived(){const u=crUses().find(u=>u.id===$('crReceiveForm')?.dataset.use);if(!u||u.status!=='pending')return crTrackingError('Reward status changed. Close and try again.');const actual=Number($('crReceivedActual').value),date=$('crReceivedDate').value,link=$('crReceivedLink')?.value||'';if(!validDate(date)||date<u.date||date>localDay()||$('crReceivedActual').value===''||!Number.isFinite(actual)||actual<0||(u.unit==='points'&&!Number.isInteger(actual)))return crTrackingError('Enter a valid received amount and date, from purchase date through today.');if(link&&!crLinkableCredits(u).some(t=>t.id===link))return crTrackingError('Choose an available ledger credit.');checkpoint();u.actual=actual;u.receivedDate=date;u.status='received';u.linkedTransactionId=link;save();crTrackingClose();renderAll();toast('Reward marked received. Ledger balances unchanged.');}
+function crReopenUse(id){const u=crUses().find(u=>u.id===id);if(!u)return;checkpoint();u.status='pending';delete u.actual;delete u.receivedDate;delete u.linkedTransactionId;save();renderAll();toast('Reward returned to pending.');}
+function crDeleteUse(id){if(!confirm('Remove this usage record? This releases its reserved cashback cap and may make the offer available again. Ledger transactions are unchanged.'))return;checkpoint();extra.cardOfferUses=crUses().filter(u=>u.id!==id);save();renderAll();toast('Usage record removed.');}
+const crBeforeUsageRender=crRender;
+crRender=function(){crBeforeUsageRender();crTrackingRender();};
 
 window.__ledgerStart = () => { init(); setupUpgrade(); };
 window.__ledgerStore = store;
