@@ -288,6 +288,7 @@ body{background:#f2f4f0}.wrap{max-width:1320px;padding:32px 28px 80px}header.top
 
 </style>
 <style>.cr-merchant-group{min-width:0;padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--surface-2)}.cr-merchant-group>h3{margin:0 0 16px}.cr-merchant-group>.cr-offer{border-radius:10px;margin-top:12px;background:var(--surface)}.cr-effective-breakdown{font-size:12px;color:var(--muted)}</style>
+<style>.cr-search-panel{margin-top:16px}.cr-search-form>label{display:block;font-size:13px;font-weight:600;margin-bottom:9px;color:var(--ink)}.cr-search-controls{display:flex;gap:10px;align-items:center}.cr-search-controls input{flex:1;min-width:0;padding:12px;border:1px solid var(--line-strong);border-radius:9px;background:var(--surface-2);font:inherit}.cr-search-controls .btn-primary{width:auto;flex:none}.cr-search-panel #crSearchStatus{margin:10px 0 0;font-size:12px;color:var(--muted)}.cr-search-panel #crSearchStatus:empty{display:none}#view-card-rewards [hidden]{display:none!important}@media(max-width:520px){.cr-search-controls{flex-wrap:wrap}.cr-search-controls input{flex-basis:100%}.cr-search-controls button{flex:1}}</style>
 </head>
 <body>
 <div class="wrap">
@@ -1526,6 +1527,35 @@ page=function(name){
 };
 const crDetailSetup=setupUpgrade;
 setupUpgrade=function(){crDetailSetup();const el=document.createElement('div');el.id='view-card-reward-detail';el.className='view';document.querySelector('.wrap').appendChild(el);crRender();if(crDetailInitialRoute.startsWith('card-reward-detail/'))page(crDetailInitialRoute);};
+
+/* Card rewards merchant and category search */
+let crSearchQuery='';
+function crApplySearch(){
+ const root=$('view-card-rewards');if(!root)return;
+ const term=crSearchQuery.trim().toLocaleLowerCase();
+ const categories=[...root.querySelectorAll('.cr-best')],merchants=[...root.querySelectorAll('.cr-merchant-group')];
+ let nc=0,nm=0;
+ categories.forEach(el=>{const match=!term||(el.querySelector('h3')?.textContent||'').toLocaleLowerCase().includes(term);el.hidden=!match;if(match)nc++;});
+ merchants.forEach(el=>{const match=!term||(el.querySelector(':scope > h3')?.textContent||'').toLocaleLowerCase().includes(term);el.hidden=!match;if(match)nm++;});
+ const status=$('crSearchStatus');if(status)status.textContent=term?`${nc} matching ${nc===1?'category':'categories'} · ${nm} matching ${nm===1?'merchant':'merchants'}`:'';
+ for(const [id,count] of [['crNoCategories',nc],['crNoMerchants',nm]]){const el=$(id);if(el)el.hidden=!term||count>0;}
+ const clear=$('crSearchClear');if(clear)clear.disabled=!crSearchQuery;
+}
+const crBeforeSearchRender=crRender;
+crRender=function(){
+ crBeforeSearchRender();const root=$('view-card-rewards');if(!root)return;
+ const panel=document.createElement('section');panel.className='card cr-search-panel';
+ panel.innerHTML='<div class="card-b"><form id="crSearchForm" role="search" class="cr-search-form"><label for="crRewardsSearch">Search merchants & categories</label><div class="cr-search-controls"><input id="crRewardsSearch" type="search" placeholder="Search Walmart, Grocery, Dining…" autocomplete="off"><button class="btn-primary" type="submit">Search</button><button class="btn-ghost" type="button" id="crSearchClear">Clear</button></div></form><p id="crSearchStatus" role="status" aria-live="polite"></p></div>';
+ root.prepend(panel);$('crRewardsSearch').value=crSearchQuery;
+ $('crRewardsSearch').oninput=e=>{crSearchQuery=e.target.value;crApplySearch();};
+ $('crSearchForm').onsubmit=e=>{e.preventDefault();crSearchQuery=$('crRewardsSearch').value;crApplySearch();};
+ $('crSearchClear').onclick=()=>{crSearchQuery='';$('crRewardsSearch').value='';crApplySearch();$('crRewardsSearch').focus();};
+ for(const [selector,id,message] of [['.cr-best','crNoCategories','No matching categories.'],['.cr-merchant-group','crNoMerchants','No matching merchants.']]){
+  const grid=root.querySelector(selector)?.parentElement;
+  if(grid){const msg=document.createElement('p');msg.id=id;msg.className='acct-meta';msg.textContent=message;msg.hidden=true;grid.after(msg);}
+ }
+ crApplySearch();
+};
 
 window.__ledgerStart = () => { init(); setupUpgrade(); };
 window.__ledgerStore = store;
