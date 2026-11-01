@@ -489,6 +489,15 @@ body{background:#f2f4f0}.wrap{max-width:1320px;padding:32px 28px 80px}header.top
 #crPortalComparison .cr-simple-rakuten-note a{display:inline;padding:0;border:0;border-radius:0;background:transparent;color:var(--emerald,#2e6e5c);font-size:inherit;text-decoration:underline}
 #crPortalComparison .cr-portal-fixed-heading{margin-top:16px}
 </style>
+<style>
+.cr-memory-hint{display:block;font-size:10px;color:var(--emerald);margin-top:4px}
+#crOfferAttention .card-h{padding-bottom:0}
+.cr-attention-items{display:flex;gap:8px;overflow-x:auto;padding:10px 14px 14px}
+.cr-attention-item{flex:0 0 230px;text-align:left;border:1px solid var(--line);border-left:3px solid var(--emerald);border-radius:9px;background:var(--surface-2);padding:10px;color:var(--text);cursor:pointer}
+.cr-attention-item strong,.cr-attention-item span,.cr-attention-item small{display:block}
+.cr-attention-item strong{font-size:12px}.cr-attention-item span{font-size:11px;color:var(--muted);margin:3px 0}.cr-attention-item small{font-size:11px;line-height:1.5;color:var(--emerald-deep)}
+.cr-attention-item:focus-visible{outline:2px solid var(--emerald);outline-offset:2px}
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -2231,6 +2240,66 @@ crPortalOfferRow=function(r){
  const note='<div class="cr-simple-rakuten-note"><strong>With your Rakuten Amex:</strong><span>4% card reward + '+escapeHtml(portal)+'</span><small>Eligible purchases only; annual card limit and exclusions apply. <a href="https://help.ebates.com/hc/en-us/articles/41497337630611-Earning-Rewards-with-the-Rakuten-Card" target="_blank" rel="noopener noreferrer">Card terms</a></small></div>';
  return html.replace('<div class="cr-portal-actions">',note+'<div class="cr-portal-actions">');
 };
+
+/* Merchant category memory and offer attention strip */
+const crMerchantMemoryKey=v=>String(v||'').normalize('NFKC').trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
+function crRememberedCategory(merchant){
+ const key=crMerchantMemoryKey(merchant),rows=Array.isArray(extra.merchantRewardCategories)?extra.merchantRewardCategories:[];
+ const category=rows.find(x=>x.key===key)?.category;
+ return category&&crSharedCategories().find(c=>crMatch(c)===crMatch(category))||'';
+}
+function crRememberMerchantCategory(merchant,category){
+ const key=crMerchantMemoryKey(merchant);if(!key||!category)return;
+ const rows=Array.isArray(extra.merchantRewardCategories)?extra.merchantRewardCategories:[];
+ if(rows.find(x=>x.key===key)?.category===category)return;
+ const before=snapshot(),previousUndo=undoState;checkpoint();
+ extra.merchantRewardCategories=rows.filter(x=>x.key!==key).concat({key,merchant,category});
+ if(!save()){adopt(JSON.parse(before));undoState=previousUndo;$('undoAction').disabled=!undoState;toast('Category could not be remembered.');}
+}
+const crBeforeMemoryResolve=crResolvePurchase;
+crResolvePurchase=function(p){return crBeforeMemoryResolve(!crMatch(p.category)&&crRememberedCategory(p.merchant)?{...p,category:crRememberedCategory(p.merchant)}:p);};
+function crMountMerchantMemory(){
+ const form=$('crPurchaseForm'),merchant=$('crPurchaseMerchant'),category=$('crPurchaseCategory');if(!form||form.dataset.categoryMemory)return;
+ form.dataset.categoryMemory='1';let manualKey='',autoValue='';
+ const hint=document.createElement('small');hint.id='crRememberedCategoryHint';hint.className='cr-memory-hint';category.after(hint);
+ const fill=()=>{const key=crMerchantMemoryKey(merchant.value),saved=crRememberedCategory(merchant.value);hint.textContent='';
+  if(manualKey&&manualKey===key)return;
+  if(saved){category.value=saved;autoValue=saved;hint.textContent='Remembered category · edit to change';}
+  else if(autoValue&&category.value===autoValue){category.value='';autoValue='';}
+ };
+ merchant.addEventListener('input',fill);merchant.addEventListener('change',fill);
+ category.addEventListener('input',()=>{manualKey=crMerchantMemoryKey(merchant.value);autoValue='';hint.textContent='';});
+ const original=form.onsubmit;form.onsubmit=e=>{original(e);const r=crCalculatePurchase(crPurchase);if(!r.error&&r.merchant&&r.category)crRememberMerchantCategory(r.merchant,r.category);};
+ const clear=$('crPurchaseClear'),oldClear=clear.onclick;clear.onclick=()=>{oldClear();manualKey='';autoValue='';hint.textContent='';};
+ if(!category.value)fill();
+}
+function crOfferAttentionItems(today=localDay()){
+ const day=v=>Date.parse(v+'T00:00:00Z'),items=[];
+ for(const o of extra.cardMerchantOffers||[]){const a=crCard(o.card);if(!a||!crActive(o))continue;const reasons=[];
+  const days=o.to?Math.round((day(o.to)-day(today))/86400000):null;
+  if(days!==null&&days>=0&&days<=7)reasons.push(days===0?'Expires today':days===1?'Expires tomorrow':'Expires in '+days+' days');
+  if(crNeedsActivation(o))reasons.push('Needs activation');
+  const group=crMinimumMode(o)==='combined'?crOpenSpendGroup(o):null,minimum=Number(o.minimum)||0,spent=Number(group?.purchaseAmount)||0;
+  if(minimum>0&&spent>=minimum*.8&&spent<minimum)reasons.push(money(round2(minimum-spent),a.cur||'USD')+' remaining to minimum');
+  if(reasons.length)items.push({offer:o,card:a,reasons,days:days===null?Infinity:days});
+ }
+ return items.sort((a,b)=>a.days-b.days||crAlpha(a.offer.merchant,b.offer.merchant)||crAlpha(a.card.name,b.card.name));
+}
+function crOpenAttentionOffer(id){
+ const o=extra.cardMerchantOffers.find(x=>x.id===id);if(!o)return;crOpenCard(o.card);
+ const row=[...$('view-card-reward-detail').querySelectorAll('[data-offer-id]')].find(el=>el.dataset.offerId===id);
+ if(row){row.tabIndex=-1;row.focus({preventScroll:true});row.scrollIntoView({behavior:'smooth',block:'center'});}
+}
+function crMountOfferAttention(){
+ $('crOfferAttention')?.remove();const root=$('view-card-rewards'),merchant=root?.querySelector('.cr-merchants-section');if(!merchant)return;
+ const items=crOfferAttentionItems();if(!items.length)return;
+ const section=document.createElement('section');section.id='crOfferAttention';section.className='card cr-attention-strip';section.dataset.crSubview='offers';section.setAttribute('role','tabpanel');section.setAttribute('aria-labelledby','crSubtab-offers');
+ section.innerHTML='<div class="card-h"><h2>Needs attention</h2></div><div class="cr-attention-items">'+items.map(x=>'<button type="button" class="cr-attention-item" data-offer-id="'+escapeHtml(x.offer.id)+'"><strong>'+escapeHtml(x.offer.merchant)+'</strong><span>'+escapeHtml(x.card.name)+'</span><small>'+escapeHtml(x.reasons.join(' · '))+'</small></button>').join('')+'</div>';
+ section.querySelectorAll('button').forEach(b=>b.onclick=()=>crOpenAttentionOffer(b.dataset.offerId));merchant.before(section);
+ const tab=$('crSubtab-offers');if(tab){const ids=new Set((tab.getAttribute('aria-controls')||'').split(' ').filter(Boolean));ids.add(section.id);tab.setAttribute('aria-controls',[...ids].join(' '));}
+}
+const crBeforeMemoryAttentionRender=crRender;
+crRender=function(){crBeforeMemoryAttentionRender();crMountMerchantMemory();crMountOfferAttention();crApplyRewardsTab();};
 
 window.__ledgerStart = () => { init(); setupUpgrade(); };
 window.__ledgerStore = store;
