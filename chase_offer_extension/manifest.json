@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Daily Ledger — Chase Offer Reader",
+  "version": "0.1.0",
+  "description": "Read loaded Chase offer tiles on demand and export them for review in Daily Ledger.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "action": {"default_title": "Read Chase offers", "default_popup": "popup.html"},
+  "content_security_policy": {"extension_pages": "script-src 'self'; object-src 'none'; connect-src 'none'"}
+}

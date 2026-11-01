@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Chase offers → Daily Ledger</title><link rel="stylesheet" href="popup.css"></head><body>
+<h1>Chase offers → Daily Ledger</h1><p>Read loaded offers for one Chase card. Nothing is activated or sent anywhere.</p>
+<label>Ledger card name<input id="cardName" maxlength="100" placeholder="e.g. Chase Freedom Flex"></label>
+<label class="check"><input id="singleCard" type="checkbox"> I selected this single card in Chase Offers.</label>
+<div class="buttons"><button id="capture">Read Chase offers</button><button id="clear" class="secondary">Clear captured data</button></div>
+<p id="status" role="status"></p><section id="preview" hidden><h2 id="batchTitle"></h2><p>Select offers to export; review full terms in the ledger.</p><label class="check"><input id="all" type="checkbox" checked> Select all</label><div id="rows"></div><button id="download">Download for Ledger</button></section>
+<small>Scroll/expand offers on Chase before reading. Switch cards and repeat for each card. This first version supports loaded tile layouts, including open shadow roots; it cannot read unopened details or closed shadow roots.</small>
+<script src="popup.js"></script></body></html>

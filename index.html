@@ -535,6 +535,20 @@ body{background:#f2f4f0}.wrap{max-width:1320px;padding:32px 28px 80px}header.top
 @media(max-width:720px){.cr-discovery-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:420px){.cr-discovery-grid{grid-template-columns:1fr}.cr-discovery-toolbar>label:first-child{width:100%}}
 </style>
+<style>
+#crChaseImportButton{font-size:11px;padding:6px 9px;min-height:31px;margin-left:auto}
+.cr-chase-import-modal .cr-tracking-dialog{width:min(920px,95vw)}
+.cr-chase-review-row{border:1px solid var(--line);background:var(--surface-2);padding:12px;border-radius:9px;margin:12px 0}
+.cr-chase-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.cr-chase-fields label{font-size:11px;min-width:0}.cr-chase-fields input,.cr-chase-fields select{width:100%;box-sizing:border-box;min-height:34px;margin-top:4px}
+.cr-chase-choice{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600}
+.cr-chase-choice input{width:auto;min-height:0}
+.cr-chase-warning{font-size:11px;line-height:1.5;color:var(--muted)}
+.cr-chase-review-row textarea{width:100%;box-sizing:border-box;margin-top:7px;font-size:12px}
+.cr-chase-review-row summary{font-size:11px;margin-top:9px;cursor:pointer}
+@media(max-width:650px){.cr-chase-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:400px){.cr-chase-fields{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -2567,6 +2581,95 @@ crApplyRewardsTab=function(){crBeforeDiscoveryTab();if($('crOfferDiscovery'))$('
 const crBeforeDiscoveryPage=page;
 page=function(name){const result=crBeforeDiscoveryPage(name);crDiscoverySchedule();return result;};
 document.addEventListener('visibilitychange',crDiscoverySchedule);
+
+/* Chase extension offer import and review */
+let crChaseDraft=[],crChaseBatch=null,crChaseImportBusy=false;
+const crChaseName=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+function crChaseValidateFile(value){
+ if(!value||value.format!=='daily-ledger-chase-offers'||value.version!==1||value.issuer!=='Chase'||typeof value.cardLabel!=='string'||!value.cardLabel.trim()||value.cardLabel.length>100||!Array.isArray(value.offers)||!value.offers.length||value.offers.length>500)throw Error('Not a supported Chase offer export.');
+ const rows=value.offers.map(o=>{if(!o||typeof o.merchant!=='string'||typeof o.text!=='string'||o.merchant.length>100||o.text.length>6000||!['percent','cash','points',''].includes(o.unit)||!(o.value===null||typeof o.value==='number'&&Number.isFinite(o.value))||!(o.minimum===null||typeof o.minimum==='number'&&Number.isFinite(o.minimum))||!(o.cap===null||typeof o.cap==='number'&&Number.isFinite(o.cap))||typeof o.to!=='string'||o.to.length>10||typeof o.sourceId!=='string'||o.sourceId.length>100||!['added','not-added','unknown'].includes(o.activation)||!['single','combined','unknown'].includes(o.minimumMode))throw Error('This export contains an invalid offer. No offers imported.');
+  return {...o,sourceId:o.sourceId.replace(/[^A-Za-z0-9_.:\-]/g,''),warnings:Array.isArray(o.warnings)?o.warnings.filter(x=>typeof x==='string').map(x=>x.slice(0,150)).slice(0,12):[]};});
+ return {...value,offers:rows};
+}
+function crChaseTerms(row){return JSON.stringify([crChaseName(row.merchant),row.unit,Number(row.value),row.from||'',row.to||'',Number(row.minimum)||0,Number(row.cap)||0,row.minimumMode==='combined'?'combined':'single',row.category||'']);}
+function crChaseClassify(row,list=extra.cardMerchantOffers){
+ const sameCard=list.filter(o=>o.card===row.card),sourceId=row.importSource?.offerId;
+ let matches=sourceId?sameCard.filter(o=>o.importSource?.provider==='chase-extension'&&o.importSource.offerId===sourceId):[];
+ if(!matches.length){const exact=sameCard.filter(o=>crChaseTerms(o)===crChaseTerms(row));if(exact.length===1)matches=exact;else if(exact.length>1)return {kind:'ambiguous',message:'Several matching existing offers; review them manually.'};}
+ if(!matches.length)matches=sameCard.filter(o=>crChaseName(o.merchant)===crChaseName(row.merchant)&&o.unit===row.unit&&Number(o.value)===Number(row.value));
+ if(matches.length>1)return {kind:'ambiguous',message:'Several similar offers exist; review them manually.'};
+ if(!matches.length)return {kind:'new',message:'New offer'};
+ const old=matches[0],sameTerms=crChaseTerms(old)===crChaseTerms(row),priorText=old.importSource?.text;
+ const changedText=!!priorText&&priorText.replace(/\s+/g,' ').trim()!==row.details.replace(/\s+/g,' ').trim();
+ const changedActivation=row.importSource.activation!=='unknown'&&!!old.activated!==row.activated;
+ if(sameTerms&&!changedText&&!changedActivation)return {kind:'duplicate',old,message:'Already exists — skipped'};
+ if((!sameTerms||changedText)&&crUses().some(u=>u.offerId===old.id))return {kind:'tracked',old,message:'Changed terms, but tracked purchases exist — existing offer kept'};
+ return {kind:'update',old,message:changedActivation&&sameTerms&&!changedText?'Activation status changed — select to update':'Changed terms — select to update existing offer'};
+}
+function crChaseReadRow(i){
+ const source=crChaseDraft[i],get=key=>$('crChase-'+key+'-'+i),card=crCard($('crChaseCard').value);if(!card)throw Error('Choose the ledger card that was selected in Chase.');
+ const merchant=get('merchant').value.trim(),unit=get('unit').value,value=Number(get('value').value),category=get('category').value,from=get('from').value,to=get('to').value,minimum=get('min').value===''?0:Number(get('min').value),cap=get('cap').value===''?0:Number(get('cap').value),mode=get('mode').value,activation=get('activation').value,details=get('details').value.trim();
+ if(!merchant||merchant.length>100||!['percent','cash','points'].includes(unit)||get('value').value===''||!Number.isFinite(value)||value<=0||unit==='percent'&&value>100||unit==='points'&&!Number.isInteger(value))throw Error('Offer '+(i+1)+': check merchant, reward type and positive value.');
+ if(!category||!crSharedCategories().includes(category))throw Error('Offer '+(i+1)+': choose a shared reward category.');
+ if(![minimum,cap].every(n=>Number.isFinite(n)&&n>=0)||mode==='unknown')throw Error('Offer '+(i+1)+': review spending limits and choose single or combined purchases.');
+ if(from&&!validDate(from)||to&&!validDate(to)||from&&to&&from>to)throw Error('Offer '+(i+1)+': check offer dates.');
+ if(to&&to<localDay())throw Error('Offer '+(i+1)+': this offer has expired.');
+ const row={card:card.id,merchant,unit,value,category,minimum,cap,minimumMode:mode,from,to,details,regularRate:crBaseRate(card.id,category).cashback,requiresActivation:true,activated:activation==='added',estimateSpend:0,importSource:{provider:'chase-extension',offerId:source.sourceId||'',capturedAt:crChaseBatch.capturedAt||'',text:details,activation}};
+ return row;
+}
+function crChaseUpdateStatus(i,allowSelection=false){
+ const status=$('crChase-status-'+i),pick=$('crChase-pick-'+i);if(!status||!pick)return;
+ try{const row=crChaseReadRow(i),result=crChaseClassify(row);status.textContent=result.message;
+  if(result.old){const old=result.old;status.textContent+=' · Existing: '+old.value+(old.unit==='percent'?'%':' '+old.unit)+', minimum '+(old.minimum||0)+', cap '+(old.cap||0)+', expires '+(old.to||'not entered');}
+  pick.disabled=['duplicate','ambiguous','tracked'].includes(result.kind);if(pick.disabled)pick.checked=false;else if(allowSelection)pick.checked=result.kind==='new';
+ }catch(e){status.textContent=e.message;pick.disabled=false;if(allowSelection)pick.checked=false;}
+}
+function crChaseReview(){
+ const cards=creditAccts().slice().sort((a,b)=>crAlpha(a.name,b.name)),categories=crSharedCategories(),matched=cards.filter(a=>crChaseName(a.name)===crChaseName(crChaseBatch.cardLabel)),selected=matched.length===1?matched[0].id:'';
+ const opts=(values,current,placeholder='Choose…')=>'<option value="">'+placeholder+'</option>'+values.map(v=>'<option value="'+escapeHtml(v)+'" '+(v===current?'selected':'')+'>'+escapeHtml(v)+'</option>').join('');
+ const f=(i,key,label,input)=>'<label>'+label+input.replace('DATAID','id="crChase-'+key+'-'+i+'"')+'</label>';
+ const rows=crChaseDraft.map((o,i)=>{const remembered=typeof crRememberedCategory==='function'?crRememberedCategory(o.merchant):'';return '<article class="cr-chase-review-row"><label class="cr-chase-choice"><input type="checkbox" id="crChase-pick-'+i+'"> Import offer '+(i+1)+'</label><p id="crChase-status-'+i+'" class="acct-meta"></p>'+(o.warnings.length?'<p class="cr-chase-warning">Check: '+escapeHtml(o.warnings.join(' · '))+'</p>':'')+'<div class="cr-chase-fields">'+
+ f(i,'merchant','Merchant','<input DATAID maxlength="100" value="'+escapeHtml(o.merchant)+'">')+
+ f(i,'unit','Reward type','<select DATAID>'+['percent','cash','points'].map(v=>'<option value="'+v+'" '+(v===o.unit?'selected':'')+'>'+({percent:'% cashback',cash:'Fixed cashback',points:'Bonus points'})[v]+'</option>').join('')+'</select>')+
+ f(i,'value','Reward value','<input DATAID type="number" min="0.01" step="0.01" value="'+(o.value??'')+'">')+
+ f(i,'category','Reward category','<select DATAID>'+opts(categories,remembered)+'</select>')+
+ f(i,'min','Minimum spend · blank if none','<input DATAID type="number" min="0" step="0.01" value="'+(o.minimum??'')+'">')+
+ f(i,'cap','Cashback cap · blank if none','<input DATAID type="number" min="0" step="0.01" value="'+(o.cap??'')+'">')+
+ f(i,'mode','Spending requirement','<select DATAID><option value="unknown" '+(o.minimumMode==='unknown'?'selected':'')+'>Review this rule</option><option value="single" '+(o.minimumMode==='single'?'selected':'')+'>One transaction</option><option value="combined" '+(o.minimumMode==='combined'?'selected':'')+'>Combined purchases</option></select>')+
+ f(i,'activation','Chase activation status','<select DATAID><option value="unknown" '+(o.activation==='unknown'?'selected':'')+'>Not verified</option><option value="not-added" '+(o.activation==='not-added'?'selected':'')+'>Not added</option><option value="added" '+(o.activation==='added'?'selected':'')+'>Added to card</option></select>')+
+ f(i,'from','Valid from · optional','<input DATAID type="date">')+
+ f(i,'to','Valid through · verify estimates','<input DATAID type="date" value="'+escapeHtml(o.to)+'">')+'</div><details><summary>Captured terms · edit if necessary</summary><textarea id="crChase-details-'+i+'" rows="4" maxlength="6000">'+escapeHtml(o.text)+'</textarea></details></article>';}).join('');
+ crTrackingModal('Review Chase offer import','<p>Captured card nickname: <strong>'+escapeHtml(crChaseBatch.cardLabel)+'</strong>. Select the same card below. Blank limits mean no limit entered; fill in missing terms before importing. Unknown activation stays “Needs activation”.</p><label>Ledger card<select id="crChaseCard"><option value="">Choose the matching card</option>'+cards.map(a=>'<option value="'+escapeHtml(a.id)+'" '+(a.id===selected?'selected':'')+'>'+escapeHtml(a.name)+'</option>').join('')+'</select></label><div class="controls"><label>Fill missing categories<select id="crChaseDefaultCat">'+opts(categories,'')+'</select></label><button type="button" id="crChaseSelect">Select ready new offers</button></div><div id="crChaseReviewRows">'+rows+'</div><label class="cr-tracking-check"><input id="crChaseConfirmed" type="checkbox"> I confirmed the card and reviewed selected offers, including blank limits/dates. This import does not activate offers.</label><p id="crTrackingError" role="alert"></p><div class="controls"><button type="button" class="btn-primary" id="crChaseCommit">Import selected offers</button><button type="button" class="btn-ghost" onclick="crTrackingClose()">Cancel</button></div>');
+ $('crTrackingModal').classList.add('cr-chase-import-modal');
+ crChaseDraft.forEach((o,i)=>{for(const key of ['merchant','unit','value','category','min','cap','mode','activation','from','to','details'])$('crChase-'+key+'-'+i).addEventListener('change',()=>{crChaseUpdateStatus(i);$('crChaseConfirmed').checked=false;});crChaseUpdateStatus(i,true);});
+ $('crChaseCard').onchange=()=>{crChaseDraft.forEach((o,i)=>crChaseUpdateStatus(i,true));$('crChaseConfirmed').checked=false;};
+ $('crChaseDefaultCat').onchange=e=>{crChaseDraft.forEach((o,i)=>{const input=$('crChase-category-'+i);if(!input.value)input.value=e.target.value;crChaseUpdateStatus(i,true);});$('crChaseConfirmed').checked=false;};
+ $('crChaseSelect').onclick=()=>crChaseDraft.forEach((o,i)=>crChaseUpdateStatus(i,true));$('crChaseCommit').onclick=crChaseCommit;
+}
+async function crChaseLoadFile(file){
+ if(!file)return;try{if(file.size>4000000)throw Error('Offer export is too large (maximum 4 MB).');const parsed=crChaseValidateFile(JSON.parse(await file.text()));crChaseBatch=parsed;crChaseDraft=parsed.offers;crChaseReview();}catch(e){toast(e.message||'Could not read offer export.');}
+}
+function crChaseCommit(){
+ if(crChaseImportBusy||!$('crChaseCommit'))return;if(!$('crChaseConfirmed').checked)return crTrackingError('Confirm the card and selected offer terms first.');
+ const selected=crChaseDraft.map((o,i)=>i).filter(i=>$('crChase-pick-'+i).checked);if(!selected.length)return crTrackingError('Select at least one offer.');
+ const virtual=extra.cardMerchantOffers.slice(),plans=[];let skipped=0;
+ try{for(const i of selected){const incoming=crChaseReadRow(i),result=crChaseClassify(incoming,virtual);if(result.kind==='duplicate'){skipped++;continue;}if(['ambiguous','tracked'].includes(result.kind))throw Error('Offer '+(i+1)+': '+result.message);
+   if(result.old){const old=result.old;if(incoming.importSource.activation==='unknown')incoming.activated=!!old.activated;const row={...old,...incoming,id:old.id,details:incoming.details,favorite:!!old.favorite};const index=virtual.findIndex(o=>o.id===old.id);virtual[index]=row;plans.push({kind:'update',row});}
+   else{const row={...incoming,id:uid(),favorite:false};virtual.push(row);plans.push({kind:'new',row});}
+  }}catch(e){return crTrackingError(e.message);}
+ if(!plans.length)return crTrackingError('All selected offers already exist. Nothing imported.');
+ const before=snapshot(),previousUndo=undoState,button=$('crChaseCommit');crChaseImportBusy=true;button.disabled=true;let saved=false;
+ try{checkpoint();extra.cardMerchantOffers=virtual;if(!save())throw Error('Could not save. No offer changes were kept.');saved=true;}catch(e){adopt(JSON.parse(before));undoState=previousUndo;$('undoAction').disabled=!undoState;crTrackingError(e.message);}finally{crChaseImportBusy=false;if(button.isConnected)button.disabled=false;}
+ if(saved){const added=plans.filter(p=>p.kind==='new').length,updated=plans.length-added;crTrackingClose();crChaseDraft=[];crChaseBatch=null;renderAll();toast(added+' offers added · '+updated+' updated'+(skipped?' · '+skipped+' duplicates skipped':'')+'. Undo reverses this batch.');}
+}
+function crChaseMountImport(){
+ const root=$('view-card-rewards'),merchant=root?.querySelector('.cr-merchants-section .card-h');if(!merchant||$('crChaseImportButton'))return;
+ const button=document.createElement('button');button.id='crChaseImportButton';button.type='button';button.className='btn-ghost';button.textContent='Import Chase offers';
+ const file=document.createElement('input');file.type='file';file.accept='.json,application/json';file.hidden=true;file.id='crChaseImportFile';
+ file.onchange=e=>{crChaseLoadFile(e.target.files[0]);e.target.value='';};button.onclick=()=>file.click();merchant.append(button,file);
+}
+const crBeforeChaseFileRender=crRender;
+crRender=function(){crBeforeChaseFileRender();crChaseMountImport();};
 
 window.__ledgerStart = () => { init(); setupUpgrade(); };
 window.__ledgerStore = store;
