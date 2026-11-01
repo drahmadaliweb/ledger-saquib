@@ -507,6 +507,34 @@ body{background:#f2f4f0}.wrap{max-width:1320px;padding:32px 28px 80px}header.top
 #crExpenseOfferMessage{font-size:11px;line-height:1.5;margin:8px 0}
 #crExpenseOfferPanel button{font-size:11px;min-height:30px;padding:5px 9px}
 </style>
+<style>
+#crOfferDiscovery .card-b{padding-top:12px}
+.cr-discovery-toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap}
+.cr-discovery-toolbar>label:first-child{min-width:190px;font-size:11px;color:var(--muted)}
+.cr-discovery-toolbar select{display:block;width:100%;min-height:35px;margin-top:5px}
+.cr-discovery-toolbar .cr-discovery-checkbox{display:flex;align-items:center;gap:6px;font-size:12px;padding:9px 0}
+.cr-discovery-checkbox input{width:auto;min-height:0}
+.cr-discovery-toolbar button{margin-left:auto;min-height:35px;font-size:12px}
+.cr-discovery-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}
+.cr-discovery-offer{display:flex;flex-direction:column;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--surface-2);min-width:0}
+.cr-discovery-offer h3{font-size:13px;margin:0 0 8px;overflow-wrap:anywhere}
+.cr-discovery-offer>div>strong{font-size:20px;color:var(--emerald-deep)}
+.cr-discovery-offer p{font-size:11px;color:var(--muted);margin:8px 0}
+.cr-discovery-offer small{display:block;font-size:10px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.cr-discovery-terms,.cr-discovery-alternatives{font-size:11px;margin-top:10px}
+.cr-discovery-terms summary,.cr-discovery-alternatives summary{cursor:pointer;color:var(--emerald)}
+.cr-discovery-actions{padding-top:12px;margin-top:auto}
+#crOfferDiscovery a{color:var(--emerald);font-size:11px}
+#crOfferDiscovery .cr-discovery-actions a{display:inline-block;border-radius:7px;padding:7px 10px;color:white;background:var(--emerald);text-decoration:none}
+.cr-discovery-other-row{display:flex;gap:8px;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding:7px 0;font-size:11px}
+.cr-discovery-other-row b{display:block;margin-top:2px}
+.cr-discovery-about,.cr-discovery-errors{font-size:11px;margin-top:12px}
+.cr-discovery-about small,.cr-discovery-errors small{display:block;font-size:11px;line-height:1.5;color:var(--muted);margin-top:5px}
+.cr-discovery-rakuten{background:var(--emerald-soft);padding:7px;border-radius:6px;margin-top:8px}
+@media(max-width:1000px){.cr-discovery-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:720px){.cr-discovery-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:420px){.cr-discovery-grid{grid-template-columns:1fr}.cr-discovery-toolbar>label:first-child{width:100%}}
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -2396,6 +2424,149 @@ document.addEventListener('click',e=>{
 },true);
 document.addEventListener('input',e=>{if(['e-amount','e-date','e-acct'].includes(e.target.id))crOfferExpenseEstimate();});
 document.addEventListener('change',e=>{if(['e-amount','e-date','e-acct'].includes(e.target.id))crOfferExpenseEstimate();});
+
+/* Automatic cashback discovery */
+const crDiscoveryTTL=15*60*1000;
+const crDiscoveryGroups=[
+ {id:'shopping',label:'Shopping',queries:['Clothing','Shoes & Footwear']},
+ {id:'home',label:'Home & electronics',queries:['Home & Garden','Electronics']},
+ {id:'beauty',label:'Beauty & health',queries:['Beauty','Health & Wellness']},
+ {id:'hotels',label:'Hotels',queries:['Hotels'],travel:true},
+ {id:'flights',label:'Flights',queries:['Flights'],travel:true},
+ {id:'activities',label:'Travel activities',queries:['Car Rental','Tours & Activities'],travel:true}
+];
+const crDiscoveryPortals=new Map([
+ ['rakuten','Rakuten'],['ebates','Rakuten'],['topcashback','TopCashback'],['topcashbackcom','TopCashback'],
+ ['befrugal','BeFrugal'],['mrrebates','Mr. Rebates'],['rebatesme','RebatesMe'],['retailmenot','RetailMeNot'],
+ ['swagbucks','Swagbucks'],['gocashback','GoCashBack'],['shopback','ShopBack'],['activejunky','Active Junky'],
+ ['pricecom','Price.com'],['capitaloneshopping','Capital One Shopping'],['microsoftcashback','Microsoft Cashback'],
+ ['simplybestcoupons','SimplyBestCoupons'],['simplybestcouponscom','SimplyBestCoupons'],['yazing','Yazing'],['extrabux','Extrabux']
+]);
+const crDiscovery={group:'all',allRates:false,limit:12,cache:new Map(),stores:new Map(),queue:[],running:0,pausedUntil:0,serial:0,timer:null,interval:null};
+const crDiscoveryKey=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+function crDiscoverySafeURL(value){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&(u.hostname==='gotcashback.com'||u.hostname.endsWith('.gotcashback.com'))?u.href:'';}catch{return '';}}
+function crDiscoveryLink(url,text,cls=''){const safe=crDiscoverySafeURL(url);return safe?'<a class="'+cls+'" href="'+escapeHtml(safe)+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(text)+'</a>':'';}
+function crDiscoveryRate(raw){
+ if(!raw||typeof raw.portal!=='string'||typeof raw.rate!=='number'||!Number.isFinite(raw.rate)||raw.rate<=0)return null;
+ const portal=crDiscoveryPortals.get(crDiscoveryKey(raw.portal)),url=crDiscoverySafeURL(raw.url);
+ if(!portal||!url||!['percent','fixedamount'].includes(raw.type)||raw.type==='percent'&&raw.rate>100||raw.type==='fixedamount'&&raw.rate>1000000)return null;
+ // Discovery compares online shopping trips only, not linked-card/in-store programs.
+ if(raw.location!=='online')return null;
+ return {portal,url,type:raw.type,value:raw.rate,upto:raw.upto===true};
+}
+function crDiscoveryNormalize(payload,query,group){
+ if(!payload||!Array.isArray(payload.matches))throw Error('The category source returned an unexpected format.');
+ const rows=[];
+ // Accept exact categories only: a broad travel match must never be relabelled as flights.
+ for(const match of payload.matches.slice(0,5)){
+  if(match?.country_code!=='us'||crDiscoveryKey(match.name)!==crDiscoveryKey(query))continue;
+  if(!Array.isArray(match.stores))throw Error('The category source returned malformed stores.');
+  for(const store of match.stores.slice(0,200)){
+   if(store?.country_code!=='us'||!Number.isSafeInteger(store.store_id)||store.store_id<=0||typeof store.name!=='string')continue;
+   const rate=crDiscoveryRate(store.best_cashback_rate),source=crDiscoverySafeURL(store.url);if(!rate||!source)continue;
+   rows.push({id:String(store.store_id),merchant:store.name.trim().slice(0,140),source,category:String(match.name).slice(0,100),group:group.id,travel:!!group.travel,rate});
+  }
+ }
+ return rows;
+}
+function crDiscoveryActive(){return !!$('crOfferDiscovery')&&$('view-card-rewards')?.classList.contains('active')&&crRewardsTab==='offers'&&document.visibilityState!=='hidden';}
+function crDiscoveryLimited(task,priority=false){return new Promise((resolve,reject)=>{crDiscovery.queue[priority?'unshift':'push']({task,resolve,reject});crDiscoveryDrain();});}
+function crDiscoveryDrain(){while(crDiscovery.running<2&&crDiscovery.queue.length){const job=crDiscovery.queue.shift();crDiscovery.running++;Promise.resolve().then(job.task).then(job.resolve,job.reject).finally(()=>{crDiscovery.running--;crDiscoveryDrain();});}}
+function crDiscoveryRPCValue(message,id){if(!message||message.id!==id)return null;if(message.error)throw Error('The public category service returned an error.');return message.result||null;}
+async function crDiscoveryReadRPC(response,id,controller){
+ const reader=response.body?.getReader();if(!reader)throw Error('This browser cannot read the offer feed.');
+ const decoder=new TextDecoder();let buffer='',bytes=0;
+ try{while(true){const {done,value}=await reader.read();bytes+=value?.length||0;if(bytes>1500000)throw Error('The offer feed is larger than expected.');buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});buffer=buffer.replace(/\r\n/g,'\n');
+   // The public service uses server-sent events; return after the reply, not after the stream closes.
+   try{const parsed=JSON.parse(buffer),result=crDiscoveryRPCValue(parsed,id);if(result)return result;}catch(e){if(e.name!=='SyntaxError')throw e;}
+   let end;while((end=buffer.indexOf('\n\n'))>=0){const block=buffer.slice(0,end);buffer=buffer.slice(end+2);const json=block.split('\n').filter(l=>l.startsWith('data:')).map(l=>l.slice(5).trimStart()).join('\n');if(!json)continue;const result=crDiscoveryRPCValue(JSON.parse(json),id);if(result)return result;}
+   if(done)throw Error('The offer feed ended without a result.');
+  }
+ }finally{reader.cancel().catch(()=>{});controller.abort();}
+}
+async function crDiscoveryCall(name,args){
+ if(Date.now()<crDiscovery.pausedUntil)throw Error('Rate limit cooldown. Please retry shortly.');
+ const id=++crDiscovery.serial,controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
+ try{
+  const response=await fetch('https://mcp.gotcashback.com',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json, text/event-stream'},credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal,body:JSON.stringify({jsonrpc:'2.0',id,method:'tools/call',params:{name,arguments:args}})});
+  if(!response.ok){if(response.status===429){const retry=response.headers.get('Retry-After')||'',seconds=Number(retry),deadline=Number.isFinite(seconds)&&seconds>0?Date.now()+seconds*1000:Date.parse(retry);crDiscovery.pausedUntil=Math.max(Date.now()+60000,Number.isFinite(deadline)?deadline:0);}throw Error(response.status===429?'The offer source is rate limited. Please retry later.':'Offer source unavailable ('+response.status+').');}
+  const result=await crDiscoveryReadRPC(response,id,controller);if(result.isError)throw Error('The offer source could not complete this lookup.');
+  if(result.structuredContent)return result.structuredContent;
+  const text=result.content?.find(c=>c.type==='text')?.text;if(!text)throw Error('The offer source returned no data.');return JSON.parse(text);
+ }catch(e){if(e.name==='AbortError')throw Error('The offer request timed out. Retry when ready.');throw e;}
+ finally{clearTimeout(timeout);}
+}
+function crDiscoverySelectedGroups(){return crDiscoveryGroups.filter(g=>crDiscovery.group==='all'||g.id===crDiscovery.group);}
+function crDiscoveryRows(){
+ const unique=new Map();
+ for(const group of crDiscoverySelectedGroups())for(const query of group.queries){const entry=crDiscovery.cache.get(query);for(const row of entry?.rows||[]){const previous=unique.get(row.id);if(!previous||row.rate.type==='percent'&&(previous.rate.type!=='percent'||row.rate.value>previous.rate.value||row.rate.value===previous.rate.value&&Number(row.rate.upto)<Number(previous.rate.upto)))unique.set(row.id,{...row,checked:entry.time});}}
+ return [...unique.values()].sort((a,b)=>a.rate.type===b.rate.type?(a.rate.type==='percent'?b.rate.value-a.rate.value||Number(a.rate.upto)-Number(b.rate.upto):0)||crAlpha(a.merchant,b.merchant):a.rate.type==='percent'?-1:1);
+}
+function crDiscoveryRateText(r){return (r.upto?'Up to ':'')+Number(r.value.toFixed(3)).toLocaleString()+(r.type==='percent'?'% back':' fixed reward');}
+function crDiscoveryRakutenNote(r){return r.portal==='Rakuten'&&typeof crHasSimpleRakutenCard==='function'&&crHasSimpleRakutenCard()?'<small class="cr-discovery-rakuten">With your Rakuten Amex: 4% card reward + '+escapeHtml(r.type==='percent'?(r.upto?'up to ':'')+Number(r.value.toFixed(3)).toLocaleString()+'% portal cashback':'this portal reward')+' · card eligibility and annual limit apply.</small>':'';}
+function crDiscoveryRow(row){
+ const r=row.rate,stale=Date.now()-row.checked>=crDiscoveryTTL;
+ const rakuten=crDiscoveryRakutenNote(r);
+ return '<article class="cr-discovery-offer"><div><h3>'+escapeHtml(row.merchant)+'</h3><strong>'+escapeHtml(crDiscoveryRateText(r))+'</strong></div><p>'+escapeHtml(r.portal)+' · '+escapeHtml(row.category)+'</p>'+(row.travel?'<small class="cr-discovery-travel">Merchant-wide headline · confirm your booking or product qualifies.</small>':'')+'<small>'+(stale?'Previous result · ':'')+'Checked '+escapeHtml(new Date(row.checked).toLocaleString())+'</small>'+rakuten+'<details class="cr-discovery-terms"><summary>Terms & eligibility</summary><small>'+(row.travel?'This is a merchant-wide headline, not a confirmed rate for a specific flight, hotel stay, rental or subscription. ':'')+'Check eligible items, spending caps, new-customer rules, subscriptions and booking restrictions on the portal. The feed does not supply expiry dates or full exclusions. '+(r.upto?'The advertised maximum may apply only to selected purchases. ':'')+'</small>'+crDiscoveryLink(r.url,'Review portal offer')+'</details><div class="cr-discovery-actions">'+crDiscoveryLink(r.url,'Open offer','btn-primary')+'</div><details class="cr-discovery-alternatives" data-store="'+escapeHtml(row.id)+'"><summary>Other portals & fixed rewards</summary><div class="cr-discovery-other-body"><small>Open to compare this merchant’s other supported portals.</small></div></details></article>';
+}
+function crDiscoveryRender(){
+ const body=$('crDiscoveryBody');if(!body)return;const opened=new Set([...body.querySelectorAll('.cr-discovery-alternatives[open]')].map(d=>d.dataset.store));
+ const entries=crDiscoverySelectedGroups().flatMap(g=>g.queries.map(q=>({query:q,...crDiscovery.cache.get(q)}))),loading=entries.filter(e=>e.loading).length,failed=entries.filter(e=>e.error),rows=crDiscoveryRows();
+ const percent=rows.filter(r=>r.rate.type==='percent'&&(crDiscovery.allRates||r.rate.value>=10)),fixed=rows.filter(r=>r.rate.type!=='percent');
+ const shown=percent.slice(0,crDiscovery.limit);
+ body.innerHTML='<div class="cr-discovery-toolbar"><label>Category<select id="crDiscoveryCategory"><option value="all">All categories</option>'+crDiscoveryGroups.map(g=>'<option value="'+g.id+'" '+(g.id===crDiscovery.group?'selected':'')+'>'+escapeHtml(g.label)+'</option>').join('')+'</select></label><label class="cr-discovery-checkbox"><input id="crDiscoveryAllRates" type="checkbox" '+(crDiscovery.allRates?'checked':'')+'> Show rates below 10%</label><button class="btn-ghost" type="button" id="crDiscoveryRefresh" '+(loading||Date.now()<crDiscovery.pausedUntil?'disabled':'')+'>Refresh</button></div><p class="acct-meta">Public US online offers · '+(crDiscovery.allRates?'all returned percentage rates':'10% or more')+' · highest listed rate per merchant in the provider’s category shortlist.</p>'+(loading?'<p class="acct-meta" role="status">Checking '+loading+' '+(loading===1?'category':'categories')+' in the background…</p>':'')+(failed.length?'<details class="cr-discovery-errors"><summary>'+failed.length+' category '+(failed.length===1?'lookup':'lookups')+' unavailable</summary>'+failed.map(e=>'<small>'+escapeHtml(e.query+': '+e.error)+'</small>').join('')+'</details>':'')+'<div class="cr-discovery-grid">'+shown.map(crDiscoveryRow).join('')+'</div>'+
+ (!shown.length?'<p class="acct-meta">'+(loading?'Waiting for category results…':failed.length?'No matching results available from successful lookups. Retry unavailable categories.':crDiscovery.allRates?'No supported online cashback rates were returned for this category.':'No 10%+ offers were returned in this category shortlist. Try “Show rates below 10%”.')+'</p>':'')+
+ (percent.length>shown.length?'<button type="button" class="btn-ghost" id="crDiscoveryMore">Show more ('+(percent.length-shown.length)+' remaining)</button>':'')+
+ (fixed.length?'<details><summary>Fixed rewards · compare separately</summary><div class="cr-discovery-grid">'+fixed.map(crDiscoveryRow).join('')+'</div></details>':'')+
+ '<details class="cr-discovery-about"><summary>Source & coverage</summary><small>GotCashback supplies a limited category shortlist and one leading percentage rate per merchant, refreshed on its own schedule. This is not a complete scan of every merchant or portal. Unsupported miles, points and card-linked programs are excluded; if the source’s leading rate is from one, that merchant may be absent. “Other portals” checks the full merchant feed. Retrieval times are shown; the source’s publication time and full exclusions are not supplied. Links pass through GotCashback and may earn it referral credit. Public results stay in this browser tab for 15 minutes; ledger records, card balances and account details are not sent.</small></details>';
+ $('crDiscoveryCategory').value=crDiscovery.group;$('crDiscoveryCategory').onchange=e=>{crDiscovery.group=e.target.value;crDiscovery.limit=12;crDiscoveryRender();crDiscoverySchedule();};
+ $('crDiscoveryAllRates').onchange=e=>{crDiscovery.allRates=e.target.checked;crDiscovery.limit=12;crDiscoveryRender();};
+ $('crDiscoveryRefresh').onclick=()=>{if(Date.now()<crDiscovery.pausedUntil)return;for(const group of crDiscoverySelectedGroups())for(const q of group.queries){const e=crDiscovery.cache.get(q);if(e){e.force=true;e.retryAt=0;}}crDiscoverySchedule();};
+ if($('crDiscoveryMore'))$('crDiscoveryMore').onclick=()=>{crDiscovery.limit+=12;crDiscoveryRender();};
+ body.querySelectorAll('.cr-discovery-alternatives').forEach(detail=>{detail.ontoggle=()=>{if(detail.open)crDiscoveryAlternatives(detail);};if(opened.has(detail.dataset.store)){detail.open=true;crDiscoveryAlternatives(detail);}});
+}
+async function crDiscoveryAlternatives(detail){
+ if(detail.dataset.busy==='1')return;const id=Number(detail.dataset.store),body=detail.querySelector('.cr-discovery-other-body');if(!Number.isSafeInteger(id)||id<=0)return;
+ let entry=crDiscovery.stores.get(id);
+ if(entry?.html&&Date.now()-entry.time<crDiscoveryTTL){body.innerHTML=entry.html;return;}
+ if(entry?.retryAt>Date.now()){body.textContent=entry.error;return;}
+ detail.dataset.busy='1';body.textContent='Checking merchant portals…';
+ if(!entry?.promise){
+  entry={time:0,html:'',promise:null,error:'',retryAt:0};crDiscovery.stores.set(id,entry);
+  entry.promise=crDiscoveryLimited(async()=>{
+   const payload=await crDiscoveryCall('get_cashback_rates_by_store_id',{store_id:id}),store=payload.store;
+   if(store?.country_code!=='us'||store.store_id!==id||!Array.isArray(store.cashback_rates))throw Error('The source returned an unexpected merchant.');
+   const rates=store.cashback_rates.map(crDiscoveryRate).filter(Boolean).sort((a,b)=>a.type===b.type?(a.type==='percent'?b.value-a.value||Number(a.upto)-Number(b.upto):0)||crAlpha(a.portal,b.portal):a.type==='percent'?-1:1);
+   entry.html='<small>Checked '+escapeHtml(new Date().toLocaleString())+' · online offers</small>'+rates.map(r=>'<div class="cr-discovery-other-row"><span>'+escapeHtml(r.portal)+'<b>'+escapeHtml(crDiscoveryRateText(r))+'</b>'+crDiscoveryRakutenNote(r)+(r.type!=='percent'?'<small>Fixed amount: confirm currency and units on the portal.</small>':'')+'</span>'+crDiscoveryLink(r.url,'Open')+'</div>').join('')+(!rates.length?'<small>No supported online portal rates returned.</small>':'');
+   entry.time=Date.now();return entry.html;
+  },true).catch(e=>{entry.error=(e.message||'Could not retrieve rates.')+' Close and reopen to retry.';entry.retryAt=Math.max(Date.now()+60000,crDiscovery.pausedUntil);throw e;}).finally(()=>{entry.promise=null;});
+ }
+ try{await entry.promise;if(body.isConnected)body.innerHTML=entry.html;}
+ catch(e){if(body.isConnected)body.textContent=entry.error;}
+ finally{detail.dataset.busy='';while(crDiscovery.stores.size>30){const key=[...crDiscovery.stores].find(([id,e])=>!e.promise)?.[0];if(key===undefined)break;crDiscovery.stores.delete(key);}}
+}
+function crDiscoverySchedule(){
+ if(!crDiscoveryActive()||crDiscovery.timer)return;
+ crDiscovery.timer=setTimeout(()=>{crDiscovery.timer=null;if(!crDiscoveryActive())return;let started=false;
+  for(const group of crDiscoverySelectedGroups())for(const query of group.queries){const old=crDiscovery.cache.get(query);if(old?.loading||old&&Date.now()-old.time<crDiscoveryTTL&&!old.force||Date.now()<(old?.retryAt||0)||Date.now()<crDiscovery.pausedUntil)continue;
+   started=true;const entry={rows:old?.rows||[],time:old?.time||0,error:'',loading:true,retryAt:0};crDiscovery.cache.set(query,entry);
+   crDiscoveryLimited(async()=>{if(!crDiscoveryActive())return null;const payload=await crDiscoveryCall('get_best_deals_by_category',{category_name:query,country_code:'us'});return crDiscoveryNormalize(payload,query,group);}).then(rows=>{if(rows!==null){entry.rows=rows;entry.time=Date.now();}}).catch(e=>{entry.error=e.message||'Category lookup failed.';entry.retryAt=Math.max(Date.now()+60000,crDiscovery.pausedUntil);}).finally(()=>{entry.loading=false;crDiscoveryRender();});
+  }
+  if(started)crDiscoveryRender();
+ },80);
+}
+function crDiscoveryMount(){
+ const root=$('view-card-rewards');if(!root)return;let section=$('crOfferDiscovery');if(!section){const holder=document.createElement('div');holder.innerHTML=card('Discover high-cashback offers','<div id="crDiscoveryBody" aria-live="polite"></div>');section=holder.firstElementChild;section.id='crOfferDiscovery';section.dataset.crSubview='offers';section.setAttribute('role','tabpanel');section.setAttribute('aria-labelledby','crSubtab-offers');root.append(section);}
+ section.hidden=crRewardsTab!=='offers';const tab=$('crSubtab-offers');if(tab){const ids=new Set((tab.getAttribute('aria-controls')||'').split(' ').filter(Boolean));ids.add(section.id);tab.setAttribute('aria-controls',[...ids].join(' '));}crDiscoveryRender();
+ if(!crDiscovery.interval)crDiscovery.interval=setInterval(crDiscoverySchedule,60000);crDiscoverySchedule();
+}
+const crBeforeDiscoveryRender=crRender;
+crRender=function(){crBeforeDiscoveryRender();crDiscoveryMount();};
+const crBeforeDiscoveryTab=crApplyRewardsTab;
+crApplyRewardsTab=function(){crBeforeDiscoveryTab();if($('crOfferDiscovery'))$('crOfferDiscovery').hidden=crRewardsTab!=='offers';crDiscoverySchedule();};
+const crBeforeDiscoveryPage=page;
+page=function(name){const result=crBeforeDiscoveryPage(name);crDiscoverySchedule();return result;};
+document.addEventListener('visibilitychange',crDiscoverySchedule);
 
 window.__ledgerStart = () => { init(); setupUpgrade(); };
 window.__ledgerStore = store;
