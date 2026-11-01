@@ -498,6 +498,15 @@ body{background:#f2f4f0}.wrap{max-width:1320px;padding:32px 28px 80px}header.top
 .cr-attention-item strong{font-size:12px}.cr-attention-item span{font-size:11px;color:var(--muted);margin:3px 0}.cr-attention-item small{font-size:11px;line-height:1.5;color:var(--emerald-deep)}
 .cr-attention-item:focus-visible{outline:2px solid var(--emerald);outline-offset:2px}
 </style>
+<style>
+#crExpenseOfferPanel{grid-column:1/-1;padding:11px 13px;border:1px solid var(--line);border-left:3px solid var(--emerald);border-radius:9px;background:var(--emerald-soft);margin-top:8px;font-size:12px}
+#crExpenseOfferPanel>strong{display:block;margin-bottom:8px}
+#crExpenseOfferPanel label{display:flex;align-items:center;gap:7px;font-size:12px;letter-spacing:normal;text-transform:none;margin:7px 0}
+#crExpenseOfferPanel input[type=checkbox]{width:auto;min-height:0}
+#crExpenseOfferPanel [hidden]{display:none!important}
+#crExpenseOfferMessage{font-size:11px;line-height:1.5;margin:8px 0}
+#crExpenseOfferPanel button{font-size:11px;min-height:30px;padding:5px 9px}
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -2300,6 +2309,93 @@ function crMountOfferAttention(){
 }
 const crBeforeMemoryAttentionRender=crRender;
 crRender=function(){crBeforeMemoryAttentionRender();crMountMerchantMemory();crMountOfferAttention();crApplyRewardsTab();};
+
+/* Linked offer purchase shortcut */
+let crExpenseOfferContext=null,crExpenseOfferSaving=false,crExpenseOfferJustSaved=false;
+function crUseShortcutButton(o){return crCard(o.card)&&crActive(o)?'<button type="button" class="btn-ghost" data-cr-use-expense="'+escapeHtml(o.id)+'">Use this offer</button>':'';}
+const crBeforeExpenseShortcutCompact=crCompactOffer;
+crCompactOffer=function(o,first){return crBeforeExpenseShortcutCompact(o,first).replace('<div class="cr-compact-actions">','<div class="cr-compact-actions">'+crUseShortcutButton(o));};
+const crBeforeExpenseShortcutBox=crOfferBox;
+crOfferBox=function(o,summary=false){return crBeforeExpenseShortcutBox(o,summary).replace('<div class="controls">','<div class="controls">'+crUseShortcutButton(o));};
+function crCancelOfferExpense(){crExpenseOfferContext=null;$('crExpenseOfferPanel')?.remove();}
+function crOfferExpenseMessage(message){const el=$('crExpenseOfferMessage');if(el)el.textContent=message;}
+function crStartOfferExpense(id){
+ const o=extra.cardMerchantOffers.find(x=>x.id===id),a=o&&crCard(o.card);if(!a||!crActive(o))return toast('This offer is no longer available.');
+ if(($('e-details').value.trim()||$('e-amount').value)&&!confirm('Replace the unfinished expense form with this offer?'))return;
+ crCancelOfferExpense();page('spending');document.querySelector('[data-kind="expense"]')?.click();refreshLists();
+ crExpenseOfferContext={offerId:id};crExpenseOfferJustSaved=false;
+ $('e-date').value=localDay();$('e-details').value=o.merchant;$('e-acct').value=a.name;$('e-amount').value='';$('e-mult').value='1';$('e-for').value='';if($('splitLines'))$('splitLines').value='';
+ const category=o.category||crRememberedCategory(o.merchant)||'';
+ if(category&&![...$('e-cat').options].some(x=>x.value===category)){const opt=document.createElement('option');opt.value=category;opt.textContent=category;$('e-cat').appendChild(opt);}
+ $('e-cat').value=category;updateFormSyms();toggleMultField();
+ const panel=document.createElement('div');panel.id='crExpenseOfferPanel';panel.className='cr-offer-expense-panel wide';
+ const group=crOpenSpendGroup(o),last=crUses().filter(x=>x.offerId===id).slice(-1)[0];
+ panel.innerHTML='<strong>Offer: '+escapeHtml(o.merchant)+' · '+escapeHtml(a.name)+'</strong><label><input id="crExpenseTrackOffer" type="checkbox"> Track this purchase toward the offer</label><label id="crExpenseRepeatField" hidden><input id="crExpenseOfferRepeat" type="checkbox"> Terms allow this offer to be used again</label><p id="crExpenseOfferMessage" role="status"></p><button type="button" class="btn-ghost" id="crExpenseOfferCancel">Cancel offer shortcut</button>';
+ $('grp-expense').appendChild(panel);$('crExpenseOfferRepeat').checked=!!(group?.claimAllowMore??last?.allowMore);
+ $('crExpenseTrackOffer').onchange=crOfferExpenseEstimate;$('crExpenseOfferCancel').onclick=crCancelOfferExpense;
+ crOfferExpenseEstimate();$('e-amount').focus();
+}
+function crOfferExpenseEstimate(){
+ if(!crExpenseOfferContext)return;const o=extra.cardMerchantOffers.find(x=>x.id===crExpenseOfferContext.offerId),a=o&&crCard(o.card),track=$('crExpenseTrackOffer')?.checked;
+ if($('crExpenseRepeatField'))$('crExpenseRepeatField').hidden=!track;
+ if(!o||!a)return crOfferExpenseMessage('Offer or card was removed. Cancel this shortcut.');
+ if(!track)return crOfferExpenseMessage('Saves one expense. Offer progress is unchanged unless tracking is checked.');
+ if(crNeedsActivation(o))return crOfferExpenseMessage('Activate this offer with the issuer and mark it activated before tracking.');
+ const amount=round2(Number($('e-amount').value)||0);if(!(amount>0))return crOfferExpenseMessage('Enter the purchase amount to preview offer progress.');
+ const plan=crSpendPlan(o,amount);
+ if(!plan.qualifies)return crOfferExpenseMessage(plan.combined?'Combined spend: '+money(plan.total,a.cur)+' · '+money(Math.max(0,plan.minimum-plan.total),a.cur)+' remaining. This saves progress, with no pending reward yet.':'This offer requires at least '+money(plan.minimum,a.cur)+' in one transaction. Uncheck tracking to save only the expense.');
+ crOfferExpenseMessage('Expected merchant reward: '+crTrackingReward({unit:o.unit==='points'?'points':'cash',currency:a.cur},plan.expected)+'. '+(plan.prior?'Includes '+money(plan.prior,a.cur)+' of earlier purchases in this claim. ':'')+'Saved as pending, not received. Regular card rewards remain separate.');
+}
+function crBuildLinkedOfferUse(o,a,tx,plan,repeat){
+ const terms={unit:o.unit,value:o.value,cap:o.cap,minimum:o.minimum,minimumMode:crMinimumMode(o),from:o.from,to:o.to};
+ if(!plan.combined)return {id:uid(),offerId:o.id,cardId:a.id,cardName:a.name,merchant:o.merchant,category:tx.c,currency:tx.cur,unit:o.unit==='points'?'points':'cash',purchaseAmount:tx.a,date:tx.d,expected:plan.expected,status:'pending',allowMore:repeat,transactionId:tx.id,terms};
+ const u=plan.group?JSON.parse(JSON.stringify(plan.group)):{id:uid(),offerId:o.id,cardId:a.id,cardName:a.name,merchant:o.merchant,category:tx.c,currency:tx.cur,unit:o.unit==='points'?'points':'cash',minimumMode:'combined',purchases:[],terms};
+ u.purchases.push({id:uid(),date:tx.d,amount:tx.a,transactionId:tx.id});u.purchaseAmount=round2(u.purchases.reduce((s,p)=>s+Number(p.amount),0));
+ const dates=u.purchases.map(p=>p.date).sort();u.date=dates[0];u.qualifiedDate=plan.qualifies?dates[dates.length-1]:'';
+ u.expected=plan.expected;u.status=plan.qualifies?'pending':'progress';u.claimAllowMore=repeat;u.allowMore=plan.qualifies?repeat:true;return u;
+}
+function crSaveOfferExpense(){
+ if(crExpenseOfferSaving||!crExpenseOfferContext)return;
+ const o=extra.cardMerchantOffers.find(x=>x.id===crExpenseOfferContext.offerId),a=o&&crCard(o.card);
+ if(!a)return crOfferExpenseMessage('Offer or card was removed. Cancel this shortcut.');
+ const date=$('e-date').value,category=$('e-cat').value,details=$('e-details').value.trim(),amount=round2(Number($('e-amount').value)),account=accByName($('e-acct').value),mult=Number($('e-mult').value),track=!!$('crExpenseTrackOffer')?.checked;
+ if(!validDate(date)||!category||category===ADD_NEW||!details||!Number.isFinite(amount)||amount<=0||!account||!Number.isFinite(mult)||mult<0)return crOfferExpenseMessage('Check date, category, details, positive amount, account and reward multiplier.');
+ if($('e-for').value||$('splitLines')?.value.trim())return crOfferExpenseMessage('Offer shortcuts support one personal expense. Clear the person/split fields or cancel the shortcut.');
+ let plan=null,use=null;
+ if(track){
+  if(account.id!==a.id)return crOfferExpenseMessage('Choose the offer’s card, or uncheck offer tracking.');
+  if(!crActive(o)||crNeedsActivation(o))return crOfferExpenseMessage('Offer is unavailable, used, at its cap, or awaiting activation. Uncheck tracking to save only the expense.');
+  if(date>localDay()||(o.from&&date<o.from)||(o.to&&date>o.to))return crOfferExpenseMessage('Tracking requires a purchase date within the offer dates, no later than today.');
+  plan=crSpendPlan(o,amount);if(!plan.combined&&!plan.qualifies)return crOfferExpenseMessage('This purchase does not meet the one-transaction minimum. Uncheck tracking to save only the expense.');
+  if(!Number.isFinite(plan.expected)||plan.expected<0||(plan.remaining!==null&&plan.expected>plan.remaining+.00001))return crOfferExpenseMessage('The expected reward could not be calculated within the remaining cap.');
+ }
+ const tx={id:uid(),kind:'expense',d:date,c:category,t:details,a:amount,p:account.name,cur:account.cur||'USD',fx:rate(account.cur||'USD'),mult,pts:account.type==='credit'?round2(amount*mult):0,bal:true};tx.trxId=makeTrxId(tx);
+ if(!confirmDuplicateTransaction(tx))return;
+ if(track){use=crBuildLinkedOfferUse(o,a,tx,plan,!!$('crExpenseOfferRepeat').checked);tx.rewardOfferId=o.id;tx.offerUseId=use.id;}
+ const before=snapshot(),previousUndo=undoState,button=$('addExpense');crExpenseOfferSaving=true;button.disabled=true;let saved=false;
+ try{
+  checkpoint();if(!allCats().includes(category))userCats.push(category);data.push(tx);applyTx(tx,1);
+  if(use){const index=crUses().findIndex(x=>x.id===use.id);if(index<0)crUses().push(use);else extra.cardOfferUses[index]=use;}
+  if(!save())throw Error('The expense could not be saved. Neither the transaction nor offer progress was kept.');saved=true;
+ }catch(error){adopt(JSON.parse(before));undoState=previousUndo;$('undoAction').disabled=!undoState;crOfferExpenseMessage(error.message||'Nothing was saved. Try again.');}
+ finally{crExpenseOfferSaving=false;button.disabled=false;}
+ if(!saved)return;
+ crCancelOfferExpense();crExpenseOfferJustSaved=true;$('e-details').value='';$('e-amount').value='';$('e-mult').value='1';refreshLists();renderAll();
+ toast(use?(plan.qualifies?'Expense saved · merchant reward pending.':'Expense saved · offer spending progress updated.'):'Expense saved. Offer progress unchanged.');
+}
+function crLinkedPurchaseUse(id){return crUses().find(u=>u.transactionId===id||(u.purchases||[]).some(p=>p.transactionId===id));}
+const crBeforeLinkedExpenseEdit=openEditTx;
+openEditTx=function(id){if(crLinkedPurchaseUse(id))return toast('Remove this purchase’s offer-tracking record first, then edit the expense. Removing tracking keeps the ledger transaction.');return crBeforeLinkedExpenseEdit(id);};
+const crBeforeLinkedExpenseDelete=delTx;
+delTx=function(id){if(crLinkedPurchaseUse(id))return toast('Remove this purchase’s offer-tracking record first, then delete the expense.');return crBeforeLinkedExpenseDelete(id);};
+document.addEventListener('click',e=>{
+ if(e.target.closest('#addExpense')&&crExpenseOfferJustSaved&&!$('e-details').value.trim()&&!$('e-amount').value){e.preventDefault();e.stopImmediatePropagation();return;}
+ const offer=e.target.closest('[data-cr-use-expense]');if(offer){e.preventDefault();crStartOfferExpense(offer.dataset.crUseExpense);return;}
+ if(e.target.closest('#addExpense')&&crExpenseOfferContext){e.preventDefault();e.stopImmediatePropagation();crSaveOfferExpense();}
+ else if(e.target.closest('[data-kind]')&&e.target.closest('[data-kind]').dataset.kind!=='expense')crCancelOfferExpense();
+},true);
+document.addEventListener('input',e=>{if(['e-amount','e-date','e-acct'].includes(e.target.id))crOfferExpenseEstimate();});
+document.addEventListener('change',e=>{if(['e-amount','e-date','e-acct'].includes(e.target.id))crOfferExpenseEstimate();});
 
 window.__ledgerStart = () => { init(); setupUpgrade(); };
 window.__ledgerStore = store;
