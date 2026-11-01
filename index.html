@@ -2582,11 +2582,27 @@ const crBeforeDiscoveryPage=page;
 page=function(name){const result=crBeforeDiscoveryPage(name);crDiscoverySchedule();return result;};
 document.addEventListener('visibilitychange',crDiscoverySchedule);
 
+/* Bank offer JSON import: Amex summaries start as not activated by user choice. */
+function crIsAmexSummary(batch){return !!batch&&batch.format==='daily-ledger-bank-offer-preview'&&batch.version===1&&batch.issuer==='American Express'&&batch.captureMode==='read-only-summary-test';}
+function crAmexSummaryRow(o){
+ if(!o||typeof o.text!=='string')return o;
+ const warnings=Array.isArray(o.warnings)?o.warnings.filter(w=>typeof w==='string'):[];
+ const count=o.text.match(/\bup to\s+(\d{1,4})\s+times\b/i),total=o.text.match(/\btotal of\s*\$([\d,]+(?:\.\d{1,2})?)\b/i);
+ const maxUses=count&&Number(count[1])>0?Number(count[1]):/\bone[- ]time\b/i.test(o.text)?1:null;
+ let cap=o.cap;
+ if(o.unit==='cash'&&total){const parsed=Number(total[1].replace(/,/g,''));if(Number.isFinite(parsed)&&parsed>0)cap=parsed;}
+ if(maxUses)warnings.push('Summary states up to '+maxUses+' uses; verify qualifying-purchase rules.');
+ warnings.push('Imported as not activated by default; this does not verify issuer status.');
+ return {...o,activation:'not-added',observedActivation:['added','not-added','unknown'].includes(o.activation)?o.activation:'unknown',cap,maxUses,warnings};
+}
+
 /* Chase extension offer import and review */
 let crChaseDraft=[],crChaseBatch=null,crChaseImportBusy=false;
 const crChaseName=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 function crChaseValidateFile(value){
- if(!value||value.format!=='daily-ledger-chase-offers'||value.version!==1||value.issuer!=='Chase'||typeof value.cardLabel!=='string'||!value.cardLabel.trim()||value.cardLabel.length>100||!Array.isArray(value.offers)||!value.offers.length||value.offers.length>500)throw Error('Not a supported Chase offer export.');
+ const amex=crIsAmexSummary(value);
+ if(amex&&Array.isArray(value.offers))value={...value,offers:value.offers.map(crAmexSummaryRow)};
+ if(!value||!(amex||value.format==='daily-ledger-chase-offers'&&value.version===1&&value.issuer==='Chase')||typeof value.cardLabel!=='string'||!value.cardLabel.trim()||value.cardLabel.length>100||!Array.isArray(value.offers)||!value.offers.length||value.offers.length>500)throw Error('Choose a Chase offer export or an Amex read-only summary preview.');
  const rows=value.offers.map(o=>{if(!o||typeof o.merchant!=='string'||typeof o.text!=='string'||o.merchant.length>100||o.text.length>6000||!['percent','cash','points',''].includes(o.unit)||!(o.value===null||typeof o.value==='number'&&Number.isFinite(o.value))||!(o.minimum===null||typeof o.minimum==='number'&&Number.isFinite(o.minimum))||!(o.cap===null||typeof o.cap==='number'&&Number.isFinite(o.cap))||typeof o.to!=='string'||o.to.length>10||typeof o.sourceId!=='string'||o.sourceId.length>100||!['added','not-added','unknown'].includes(o.activation)||!['single','combined','unknown'].includes(o.minimumMode))throw Error('This export contains an invalid offer. No offers imported.');
   return {...o,sourceId:o.sourceId.replace(/[^A-Za-z0-9_.:\-]/g,''),warnings:Array.isArray(o.warnings)?o.warnings.filter(x=>typeof x==='string').map(x=>x.slice(0,150)).slice(0,12):[]};});
  return {...value,offers:rows};
@@ -2594,7 +2610,7 @@ function crChaseValidateFile(value){
 function crChaseTerms(row){return JSON.stringify([crChaseName(row.merchant),row.unit,Number(row.value),row.from||'',row.to||'',Number(row.minimum)||0,Number(row.cap)||0,row.minimumMode==='combined'?'combined':'single',row.category||'']);}
 function crChaseClassify(row,list=extra.cardMerchantOffers){
  const sameCard=list.filter(o=>o.card===row.card),sourceId=row.importSource?.offerId;
- let matches=sourceId?sameCard.filter(o=>o.importSource?.provider==='chase-extension'&&o.importSource.offerId===sourceId):[];
+ let matches=sourceId?sameCard.filter(o=>o.importSource?.provider===row.importSource?.provider&&o.importSource.offerId===sourceId):[];
  if(!matches.length){const exact=sameCard.filter(o=>crChaseTerms(o)===crChaseTerms(row));if(exact.length===1)matches=exact;else if(exact.length>1)return {kind:'ambiguous',message:'Several matching existing offers; review them manually.'};}
  if(!matches.length)matches=sameCard.filter(o=>crChaseName(o.merchant)===crChaseName(row.merchant)&&o.unit===row.unit&&Number(o.value)===Number(row.value));
  if(matches.length>1)return {kind:'ambiguous',message:'Several similar offers exist; review them manually.'};
@@ -2607,14 +2623,15 @@ function crChaseClassify(row,list=extra.cardMerchantOffers){
  return {kind:'update',old,message:changedActivation&&sameTerms&&!changedText?'Activation status changed — select to update':'Changed terms — select to update existing offer'};
 }
 function crChaseReadRow(i){
- const source=crChaseDraft[i],get=key=>$('crChase-'+key+'-'+i),card=crCard($('crChaseCard').value);if(!card)throw Error('Choose the ledger card that was selected in Chase.');
- const merchant=get('merchant').value.trim(),unit=get('unit').value,value=Number(get('value').value),category=get('category').value,from=get('from').value,to=get('to').value,minimum=get('min').value===''?0:Number(get('min').value),cap=get('cap').value===''?0:Number(get('cap').value),mode=get('mode').value,activation=get('activation').value,details=get('details').value.trim();
+ const source=crChaseDraft[i],get=key=>$('crChase-'+key+'-'+i),card=crCard($('crChaseCard').value);if(!card)throw Error('Choose the ledger card used for this bank export.');
+ const merchant=get('merchant').value.trim(),unit=get('unit').value,value=Number(get('value').value),category=get('category').value,from=get('from').value,to=get('to').value,minimum=get('min').value===''?0:Number(get('min').value),cap=get('cap').value===''?0:Number(get('cap').value),mode=get('mode').value,activation=crIsAmexSummary(crChaseBatch)?'not-added':get('activation').value,details=get('details').value.trim();
  if(!merchant||merchant.length>100||!['percent','cash','points'].includes(unit)||get('value').value===''||!Number.isFinite(value)||value<=0||unit==='percent'&&value>100||unit==='points'&&!Number.isInteger(value))throw Error('Offer '+(i+1)+': check merchant, reward type and positive value.');
  if(!category||!crSharedCategories().includes(category))throw Error('Offer '+(i+1)+': choose a shared reward category.');
  if(![minimum,cap].every(n=>Number.isFinite(n)&&n>=0)||mode==='unknown')throw Error('Offer '+(i+1)+': review spending limits and choose single or combined purchases.');
  if(from&&!validDate(from)||to&&!validDate(to)||from&&to&&from>to)throw Error('Offer '+(i+1)+': check offer dates.');
  if(to&&to<localDay())throw Error('Offer '+(i+1)+': this offer has expired.');
- const row={card:card.id,merchant,unit,value,category,minimum,cap,minimumMode:mode,from,to,details,regularRate:crBaseRate(card.id,category).cashback,requiresActivation:true,activated:activation==='added',estimateSpend:0,importSource:{provider:'chase-extension',offerId:source.sourceId||'',capturedAt:crChaseBatch.capturedAt||'',text:details,activation}};
+ const row={card:card.id,merchant,unit,value,category,minimum,cap,minimumMode:mode,from,to,details,regularRate:crBaseRate(card.id,category).cashback,requiresActivation:true,activated:activation==='added',estimateSpend:0,importSource:{provider:crIsAmexSummary(crChaseBatch)?'amex-summary-extension':'chase-extension',offerId:source.sourceId||'',capturedAt:crChaseBatch.capturedAt||'',text:details,activation,...(crIsAmexSummary(crChaseBatch)?{summaryOnly:true,observedActivation:source.observedActivation||'unknown',activationPolicy:'default-not-activated',maxUses:source.maxUses||null,warnings:source.warnings}: {})}};
+ if(crIsAmexSummary(crChaseBatch)){row.details=[details,'Amex summary only; full terms were not captured.',source.maxUses?'Summary usage limit: up to '+source.maxUses+' times.':'',source.warnings.length?'Review: '+source.warnings.join(' · '):''].filter(Boolean).join('\n');row.importSource.text=row.details;}
  return row;
 }
 function crChaseUpdateStatus(i,allowSelection=false){
@@ -2625,6 +2642,7 @@ function crChaseUpdateStatus(i,allowSelection=false){
  }catch(e){status.textContent=e.message;pick.disabled=false;if(allowSelection)pick.checked=false;}
 }
 function crChaseReview(){
+ const amex=crIsAmexSummary(crChaseBatch);
  const cards=creditAccts().slice().sort((a,b)=>crAlpha(a.name,b.name)),categories=crSharedCategories(),matched=cards.filter(a=>crChaseName(a.name)===crChaseName(crChaseBatch.cardLabel)),selected=matched.length===1?matched[0].id:'';
  const opts=(values,current,placeholder='Choose…')=>'<option value="">'+placeholder+'</option>'+values.map(v=>'<option value="'+escapeHtml(v)+'" '+(v===current?'selected':'')+'>'+escapeHtml(v)+'</option>').join('');
  const f=(i,key,label,input)=>'<label>'+label+input.replace('DATAID','id="crChase-'+key+'-'+i+'"')+'</label>';
@@ -2636,14 +2654,15 @@ function crChaseReview(){
  f(i,'min','Minimum spend · blank if none','<input DATAID type="number" min="0" step="0.01" value="'+(o.minimum??'')+'">')+
  f(i,'cap','Cashback cap · blank if none','<input DATAID type="number" min="0" step="0.01" value="'+(o.cap??'')+'">')+
  f(i,'mode','Spending requirement','<select DATAID><option value="unknown" '+(o.minimumMode==='unknown'?'selected':'')+'>Review this rule</option><option value="single" '+(o.minimumMode==='single'?'selected':'')+'>One transaction</option><option value="combined" '+(o.minimumMode==='combined'?'selected':'')+'>Combined purchases</option></select>')+
- f(i,'activation','Chase activation status','<select DATAID><option value="unknown" '+(o.activation==='unknown'?'selected':'')+'>Not verified</option><option value="not-added" '+(o.activation==='not-added'?'selected':'')+'>Not added</option><option value="added" '+(o.activation==='added'?'selected':'')+'>Added to card</option></select>')+
+ f(i,'activation','Activation status',amex?'<select DATAID disabled><option value="not-added" selected>Not activated (import default)</option></select>':'<select DATAID><option value="unknown" '+(o.activation==='unknown'?'selected':'')+'>Not verified</option><option value="not-added" '+(o.activation==='not-added'?'selected':'')+'>Not added</option><option value="added" '+(o.activation==='added'?'selected':'')+'>Added to card</option></select>')+
  f(i,'from','Valid from · optional','<input DATAID type="date">')+
  f(i,'to','Valid through · verify estimates','<input DATAID type="date" value="'+escapeHtml(o.to)+'">')+'</div><details><summary>Captured terms · edit if necessary</summary><textarea id="crChase-details-'+i+'" rows="4" maxlength="6000">'+escapeHtml(o.text)+'</textarea></details></article>';}).join('');
- crTrackingModal('Review Chase offer import','<p>Captured card nickname: <strong>'+escapeHtml(crChaseBatch.cardLabel)+'</strong>. Select the same card below. Blank limits mean no limit entered; fill in missing terms before importing. Unknown activation stays “Needs activation”.</p><label>Ledger card<select id="crChaseCard"><option value="">Choose the matching card</option>'+cards.map(a=>'<option value="'+escapeHtml(a.id)+'" '+(a.id===selected?'selected':'')+'>'+escapeHtml(a.name)+'</option>').join('')+'</select></label><div class="controls"><label>Fill missing categories<select id="crChaseDefaultCat">'+opts(categories,'')+'</select></label><button type="button" id="crChaseSelect">Select ready new offers</button></div><div id="crChaseReviewRows">'+rows+'</div><label class="cr-tracking-check"><input id="crChaseConfirmed" type="checkbox"> I confirmed the card and reviewed selected offers, including blank limits/dates. This import does not activate offers.</label><p id="crTrackingError" role="alert"></p><div class="controls"><button type="button" class="btn-primary" id="crChaseCommit">Import selected offers</button><button type="button" class="btn-ghost" onclick="crTrackingClose()">Cancel</button></div>');
+ crTrackingModal(amex?'Review Amex summary import':'Review Chase offer import','<p>Captured card nickname: <strong>'+escapeHtml(crChaseBatch.cardLabel)+'</strong>. Select the same card below. Blank limits mean no limit entered; fill in missing terms before importing. Unknown activation stays “Needs activation”.'+(amex?' Every selected Amex offer imports as Not activated, even if the file says added. This records a default, not a verified bank status. Summaries omit full terms; review restrictions before using an offer.':'')+'</p><label>Ledger card<select id="crChaseCard"><option value="">Choose the matching card</option>'+cards.map(a=>'<option value="'+escapeHtml(a.id)+'" '+(a.id===selected?'selected':'')+'>'+escapeHtml(a.name)+'</option>').join('')+'</select></label><div class="controls"><label>Fill missing categories<select id="crChaseDefaultCat">'+opts(categories,'')+'</select></label><label>Fill unknown spending rules<select id="crBankDefaultMode"><option value="">Keep unknown</option><option value="single">One transaction</option><option value="combined">Combined purchases</option></select></label><button type="button" id="crChaseSelect">Select ready new offers</button></div><div id="crChaseReviewRows">'+rows+'</div><label class="cr-tracking-check"><input id="crChaseConfirmed" type="checkbox"> I confirmed the card and reviewed selected offers, including blank limits/dates. This import does not activate offers.</label><p id="crTrackingError" role="alert"></p><div class="controls"><button type="button" class="btn-primary" id="crChaseCommit">Import selected offers</button><button type="button" class="btn-ghost" onclick="crTrackingClose()">Cancel</button></div>');
  $('crTrackingModal').classList.add('cr-chase-import-modal');
  crChaseDraft.forEach((o,i)=>{for(const key of ['merchant','unit','value','category','min','cap','mode','activation','from','to','details'])$('crChase-'+key+'-'+i).addEventListener('change',()=>{crChaseUpdateStatus(i);$('crChaseConfirmed').checked=false;});crChaseUpdateStatus(i,true);});
  $('crChaseCard').onchange=()=>{crChaseDraft.forEach((o,i)=>crChaseUpdateStatus(i,true));$('crChaseConfirmed').checked=false;};
  $('crChaseDefaultCat').onchange=e=>{crChaseDraft.forEach((o,i)=>{const input=$('crChase-category-'+i);if(!input.value)input.value=e.target.value;crChaseUpdateStatus(i,true);});$('crChaseConfirmed').checked=false;};
+ $('crBankDefaultMode').onchange=e=>{crChaseDraft.forEach((o,i)=>{const input=$('crChase-mode-'+i);if(input.value==='unknown'&&e.target.value)input.value=e.target.value;crChaseUpdateStatus(i,true);});$('crChaseConfirmed').checked=false;};
  $('crChaseSelect').onclick=()=>crChaseDraft.forEach((o,i)=>crChaseUpdateStatus(i,true));$('crChaseCommit').onclick=crChaseCommit;
 }
 async function crChaseLoadFile(file){
@@ -2664,7 +2683,7 @@ function crChaseCommit(){
 }
 function crChaseMountImport(){
  const root=$('view-card-rewards'),merchant=root?.querySelector('.cr-merchants-section .card-h');if(!merchant||$('crChaseImportButton'))return;
- const button=document.createElement('button');button.id='crChaseImportButton';button.type='button';button.className='btn-ghost';button.textContent='Import Chase offers';
+ const button=document.createElement('button');button.id='crChaseImportButton';button.type='button';button.className='btn-ghost';button.textContent='Import bank offers';
  const file=document.createElement('input');file.type='file';file.accept='.json,application/json';file.hidden=true;file.id='crChaseImportFile';
  file.onchange=e=>{crChaseLoadFile(e.target.files[0]);e.target.value='';};button.onclick=()=>file.click();merchant.append(button,file);
 }
