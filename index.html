@@ -479,6 +479,16 @@ body{background:#f2f4f0}.wrap{max-width:1320px;padding:32px 28px 80px}header.top
 #crPortalComparison a.btn-ghost{background:var(--surface,#fff);color:var(--text,#18352b)}
 #crPortalComparison .cr-portal-store a{display:inline;padding:0;border:0;background:transparent;border-radius:0;min-height:auto;text-decoration:underline}
 </style>
+<style>
+#crPortalComparison .cr-unified-portals{align-items:stretch}
+#crPortalComparison .cr-unified-portals>.cr-portal-offer{display:flex;flex-direction:column;min-width:0;height:100%;box-sizing:border-box}
+#crPortalComparison .cr-unified-portals .cr-portal-actions{margin-top:auto;padding-top:10px}
+#crPortalComparison .cr-simple-rakuten-note{margin:9px 0;padding:8px 9px;border-left:3px solid var(--emerald,#2e6e5c);border-radius:5px;background:var(--emerald-soft,#e4f0e8);font-size:11px;line-height:1.5}
+#crPortalComparison .cr-simple-rakuten-note strong,#crPortalComparison .cr-simple-rakuten-note span{display:block;color:var(--emerald-deep,#234f41)}
+#crPortalComparison .cr-simple-rakuten-note small{font-size:10px;margin-top:4px}
+#crPortalComparison .cr-simple-rakuten-note a{display:inline;padding:0;border:0;border-radius:0;background:transparent;color:var(--emerald,#2e6e5c);font-size:inherit;text-decoration:underline}
+#crPortalComparison .cr-portal-fixed-heading{margin-top:16px}
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -2151,9 +2161,7 @@ function crPortalRender(){
     const store=result.stores.find(x=>x.id===state.selected);
     if(store){
      const rates=store.rates.filter(r=>state.channel==='all'||r.channel===state.channel).sort((a,b)=>(a.type===b.type?b.value-a.value:a.type==='percent'?-1:1)||crAlpha(a.portal,b.portal));
-     const primary=['Rakuten','TopCashback'].map(name=>{const matches=rates.filter(r=>r.portal===name);return matches.length?matches.map(crPortalOfferRow).join(''):crPortalMissing(name);}).join('');
-     const other=rates.filter(r=>!['Rakuten','TopCashback'].includes(r.portal));
-     html+=`<p class="cr-portal-store"><strong>${escapeHtml(store.name)}</strong> · ${crPortalLink(store.source,'Source: GotCashback.com')}</p><div class="cr-portal-grid">${primary}</div>${other.length?`<details class="cr-portal-others"><summary>Compare ${other.length} other published ${other.length===1?'offer':'offers'}</summary><div class="cr-portal-grid">${other.map(crPortalOfferRow).join('')}</div></details>`:''}`;
+     html+=`<p class="cr-portal-store"><strong>${escapeHtml(store.name)}</strong> · ${crPortalLink(store.source,'Source: GotCashback.com')}</p>${crUnifiedPortalCards(rates)}`;
     }else html+='<p class="acct-meta">Choose the exact merchant to view rates. Related stores are kept separate.</p>';
    }else html+='<p class="acct-meta">No matching US merchant was returned. Try its full store name. A missing result does not mean that the portals have no offers.</p>';
   }
@@ -2201,6 +2209,28 @@ crRender=function(){crBeforePortalRender();crPortalMount();};
 
 const crBeforePortalPage=page;
 page=function(name){const result=crBeforePortalPage(name);if(name==='card-rewards')crPortalSearchChanged();else if(crPortalState.phase==='waiting'){clearTimeout(crPortalState.timer);crPortalState.phase=crPortalState.result?'ready':'idle';}return result;};
+
+/* Unified shopping portal grid and simple Rakuten reminder */
+function crUnifiedPortalCards(rates){
+ const percentages=rates.filter(r=>r.type==='percent').sort((a,b)=>b.value-a.value||crAlpha(a.portal,b.portal)||crAlpha(a.channel,b.channel));
+ const fixed=rates.filter(r=>r.type==='fixed').sort((a,b)=>crAlpha(a.portal,b.portal)||crAlpha(a.channel,b.channel));
+ if(!percentages.length&&!fixed.length)return '<p class="acct-meta">No rates were returned for this merchant and channel. This does not mean 0% cashback.</p>';
+ return (percentages.length?'<div class="cr-portal-grid cr-unified-portals">'+percentages.map(crPortalOfferRow).join('')+'</div>':'')+(fixed.length?'<p class="acct-meta cr-portal-fixed-heading">Fixed rewards · compare separately; reward units may differ</p><div class="cr-portal-grid cr-unified-portals">'+fixed.map(crPortalOfferRow).join('')+'</div>':'');
+}
+function crHasSimpleRakutenCard(){
+ return creditAccts().some(a=>{
+  const name=String(a.name||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  return ['rakutenamex','rakutenamexcard','rakutenamericanexpress','rakutenamericanexpresscard','rakutenamericanexpresscreditcard'].includes(name)||extra.cardArtwork?.[a.id]?.id==='rakuten-amex';
+ });
+}
+const crBeforeUnifiedPortalRow=crPortalOfferRow;
+crPortalOfferRow=function(r){
+ const html=crBeforeUnifiedPortalRow(r);
+ if(r.portal!=='Rakuten'||!crHasSimpleRakutenCard())return html;
+ const portal=r.type==='percent'?(r.upto?'up to ':'')+Number(r.value.toFixed(4)).toLocaleString()+'% portal cashback':'the portal reward shown above';
+ const note='<div class="cr-simple-rakuten-note"><strong>With your Rakuten Amex:</strong><span>4% card reward + '+escapeHtml(portal)+'</span><small>Eligible purchases only; annual card limit and exclusions apply. <a href="https://help.ebates.com/hc/en-us/articles/41497337630611-Earning-Rewards-with-the-Rakuten-Card" target="_blank" rel="noopener noreferrer">Card terms</a></small></div>';
+ return html.replace('<div class="cr-portal-actions">',note+'<div class="cr-portal-actions">');
+};
 
 window.__ledgerStart = () => { init(); setupUpgrade(); };
 window.__ledgerStore = store;
