@@ -449,6 +449,36 @@ body{background:#f2f4f0}.wrap{max-width:1320px;padding:32px 28px 80px}header.top
 
 #view-card-rewards>.cr-search-panel[hidden]{display:none!important}
 </style>
+<style>
+/* Public portal cashback comparisons */
+#crPortalComparison .cr-portal-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+#crPortalComparison .cr-portal-toolbar p{margin:0;flex:1;min-width:180px}
+#crPortalComparison .cr-portal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr));gap:10px;margin:10px 0;align-items:start}
+#crPortalComparison .cr-portal-offer{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2,#f6f8f4);min-width:0}
+.cr-portal-offer-top{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px}
+.cr-portal-offer-top strong{font-size:13px}.cr-portal-offer-top b{font-size:18px;color:var(--emerald)}
+.cr-portal-offer-top span{font-size:12px;color:var(--muted)}
+.cr-portal-offer>small{display:block;margin:6px 0;color:var(--muted);font-size:11px;line-height:1.5}
+#crPortalComparison details{margin:10px 0 0;padding:0;border:0}
+#crPortalComparison summary{font-size:11px}
+#crPortalComparison details p{font-size:12px;color:var(--muted);line-height:1.5;margin:8px 0}
+#crPortalComparison a.btn-primary,#crPortalComparison a.btn-ghost{display:inline-block;text-decoration:none;font-size:12px;padding:7px 10px;min-height:30px;box-sizing:border-box}
+.cr-portal-actions{margin-top:12px}
+.cr-portal-freshness{font-size:11px;color:var(--muted);margin:10px 0}
+.cr-portal-freshness.cr-portal-stale{color:#985e12}
+.cr-portal-status{font-size:12px;color:var(--emerald)}.cr-portal-error{font-size:12px;color:#ad3d2c}
+.cr-portal-selectors{display:grid;grid-template-columns:minmax(0,2fr) minmax(100px,1fr);gap:12px;margin:12px 0}
+.cr-portal-selectors label{font-size:11px;color:var(--muted)}.cr-portal-selectors select{display:block;width:100%;box-sizing:border-box;margin-top:5px}
+.cr-portal-store{font-size:12px;margin:8px 0}.cr-portal-store a{color:var(--emerald)}
+#crPortalComparison details.cr-portal-others{margin:12px 0;padding:10px 0;border-top:1px solid var(--line)}
+#crPortalComparison details.cr-portal-about{margin-top:14px;padding-top:10px;border-top:1px solid var(--line)}
+@media(max-width:600px){.cr-portal-selectors{grid-template-columns:1fr}#crPortalComparison .cr-portal-grid{grid-template-columns:1fr}.cr-portal-offer-top b{font-size:17px}}
+
+#crPortalComparison a.btn-primary,#crPortalComparison a.btn-ghost{border-radius:8px;border:1px solid var(--line);font-family:inherit;line-height:1.4}
+#crPortalComparison a.btn-primary{background:var(--emerald,#2e6e5c);border-color:var(--emerald,#2e6e5c);color:white}
+#crPortalComparison a.btn-ghost{background:var(--surface,#fff);color:var(--text,#18352b)}
+#crPortalComparison .cr-portal-store a{display:inline;padding:0;border:0;background:transparent;border-radius:0;min-height:auto;text-decoration:underline}
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -2073,6 +2103,104 @@ crRender=function(){crBeforeOrganizedRender();crRewardsWorkspace();};
 
 const crBeforeGroupDelete=crDeleteUse;
 crDeleteUse=function(id){const u=crUses().find(x=>x.id===id);if(u?.purchases?.length)return crDeleteSpendGroup(id);return crBeforeGroupDelete(id);};
+
+/* Public shopping portal comparisons */
+const crPortalAPI='https://api.gotcashback.com/v1/cashback/store/by_name/';
+const crPortalTTL=5*60*1000;
+const crPortalCatalog=[['Rakuten',['rakuten','ebates'],'https://www.rakuten.com/'],['TopCashback',['topcashback','topcashbackcom'],'https://www.topcashback.com/'],['BeFrugal',['befrugal'],'https://www.befrugal.com/'],['Mr. Rebates',['mrrebates'],'https://www.mrrebates.com/'],['RebatesMe',['rebatesme'],'https://www.rebatesme.com/'],['RetailMeNot',['retailmenot'],'https://www.retailmenot.com/'],['Swagbucks',['swagbucks'],'https://www.swagbucks.com/'],['GoCashBack',['gocashback'],'https://www.gocashback.com/'],['ShopBack',['shopback'],'https://www.shopback.com/'],['Active Junky',['activejunky'],'https://www.activejunky.com/'],['Price.com',['pricecom'],'https://price.com/'],['Capital One Shopping',['capitaloneshopping'],'https://capitaloneshopping.com/']];
+const crPortalState={query:'',key:'',phase:'idle',result:null,error:'',selected:'',channel:'all',cache:new Map(),failures:new Map(),timer:null,controller:null,serial:0,interval:null};
+const crPortalKey=v=>String(v||'').toLocaleLowerCase().replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/\/$/,'').replace(/[^a-z0-9]/g,'');
+function crPortalURL(value,sourceOnly=false){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&(!sourceOnly||u.hostname==='gotcashback.com'||u.hostname.endsWith('.gotcashback.com'))?u.href:'';}catch{return '';}}
+function crPortalLink(url,text,cls='btn-ghost'){const safe=crPortalURL(url);return safe?`<a class="${cls}" href="${escapeHtml(safe)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`:'';}
+function crPortalNormalize(payload,query){
+ if(!Array.isArray(payload))throw Error('The rate provider returned an unexpected format.');const key=crPortalKey(query),stores=[];
+ for(const raw of payload.slice(0,100)){
+  if(!raw||typeof raw!=='object'||String(raw.country_code).toLowerCase()!=='us'||typeof raw.name!=='string')continue;
+  const name=raw.name.trim().slice(0,140),domain=typeof raw.domain==='string'?raw.domain.slice(0,180):'',nameKey=crPortalKey(name),domainKey=crPortalKey(domain);
+  // A provider search can also return related brands. Never silently substitute those for the requested merchant.
+  if(!nameKey.includes(key)&&domainKey!==key&&!domainKey.startsWith(key+'.'))continue;
+  const source=crPortalURL(raw.url,true);if(!source)continue;const rates=[];
+  if(raw.cashback_rates!==null&&raw.cashback_rates!==undefined&&!Array.isArray(raw.cashback_rates))throw Error('The rate provider returned malformed offers.');
+  for(const rate of (raw.cashback_rates||[]).slice(0,150)){
+   if(!rate||typeof rate.portal!=='string'||typeof rate.rate!=='number'||!Number.isFinite(rate.rate)||rate.rate<0||rate.rate>1000000)continue;
+   const known=crPortalCatalog.find(x=>x[1].includes(crPortalKey(rate.portal)));if(!known)continue;
+   const type=rate.type==='percent'?'percent':rate.type==='fixedamount'?'fixed':'unknown';if(type==='unknown'||type==='percent'&&rate.rate>100)continue;
+   const loc=crPortalKey(rate.location),channel=loc==='online'?'online':['instore','offline'].includes(loc)?'instore':'unknown',url=crPortalURL(rate.url,true);if(!url)continue;
+   rates.push({portal:known[0],type,value:rate.rate,upto:rate.upto===true,channel,url});
+  }
+  const unique=new Map();rates.forEach(r=>unique.set([r.portal,r.type,r.value,r.upto,r.channel,r.url].join('|'),r));
+  stores.push({id:String(raw.store_id??nameKey),name,domain,source,rates:[...unique.values()]});
+ }
+ return stores.slice(0,30).sort((a,b)=>Number(crPortalKey(b.name)===key||crPortalKey(b.domain)===key)-Number(crPortalKey(a.name)===key||crPortalKey(a.domain)===key)||crAlpha(a.name,b.name));
+}
+function crPortalChoose(result,previous=''){if(result.stores.some(s=>s.id===previous))return previous;const key=crPortalKey(result.query),exact=result.stores.filter(s=>crPortalKey(s.name)===key||crPortalKey(s.domain)===key);return exact.length===1?exact[0].id:'';}
+function crPortalRateLabel(r){const n=Number(r.value.toFixed(4)).toLocaleString();return (r.upto?'Up to ':'')+n+(r.type==='percent'?'% back':' fixed reward');}
+function crPortalOfferRow(r){const channel=r.channel==='online'?'Online':r.channel==='instore'?'In-store · linked-card terms':'Channel not supplied';return `<article class="cr-portal-offer"><div class="cr-portal-offer-top"><strong>${escapeHtml(r.portal)}</strong><b>${escapeHtml(crPortalRateLabel(r))}</b></div><small>${channel}${r.upto?' · Category or eligibility limits may apply':''}</small>${r.type==='fixed'?'<small>Currency or reward unit is not supplied by this feed. Confirm before comparing with cash.</small>':''}<details><summary>Terms & exclusions</summary><p>The feed does not supply item/category exclusions, minimum spend, caps, expiry dates or new-customer rules. Check the portal’s merchant page before shopping.</p>${r.channel==='instore'?'<p>In-store offers may require card linking and may conflict with other linked-card programs.</p>':''}<p>For online purchases, choose one shopping portal and confirm its coupon and tracking rules.</p>${crPortalLink(r.url,'Review offer terms')}</details><div class="cr-portal-actions">${crPortalLink(r.url,'Open portal offer','btn-primary')}</div></article>`;}
+function crPortalMissing(name){return `<article class="cr-portal-offer cr-portal-missing"><div class="cr-portal-offer-top"><strong>${escapeHtml(name)}</strong><span>Rate not supplied</span></div><small>No matching rate was returned for this merchant and channel. This does not mean 0% cashback or that no offer exists.</small>${crPortalLink(crPortalCatalog.find(x=>x[0]===name)[2],'Check '+name)}</article>`;}
+function crPortalRender(){
+ const host=$('crPortalBody');if(!host)return;const state=crPortalState,result=state.result,loading=state.phase==='loading'||state.phase==='waiting',stale=!!result&&(Date.now()-result.fetchedAt>=crPortalTTL||!!state.error),q=state.query;
+ let html=`<div class="cr-portal-toolbar"><p class="acct-meta">Public US shopping-portal rates · separate from your targeted card offers.</p><button type="button" class="btn-ghost" id="crPortalRefresh" ${loading||q.trim().length<3?'disabled':''}>${loading?'Checking…':'Refresh rates'}</button></div>`;
+ if(!q||q.trim().length<3)html+='<p class="acct-meta">Search a merchant above (at least 3 characters) to compare Rakuten, TopCashback and other supported portals automatically.</p>';
+ else{
+  if(loading)html+='<p class="cr-portal-status" role="status">Checking public rates for '+escapeHtml(q)+'…</p>';
+  if(state.error)html+='<p class="cr-portal-error" role="status">'+escapeHtml(state.error)+(result?' Previous results are shown below.':'')+'</p>';
+  if(result){
+   html+=`<div class="cr-portal-freshness ${stale?'cr-portal-stale':''}">${stale?'Previous result · ':''}Retrieved ${escapeHtml(new Date(result.fetchedAt).toLocaleString())}. Provider rate-update time is not supplied.</div>`;
+   if(result.stores.length){
+    html+=`<div class="cr-portal-selectors"><label>Merchant<select id="crPortalMerchant"><option value="">Choose the exact merchant</option>${result.stores.map(s=>`<option value="${escapeHtml(s.id)}" ${s.id===state.selected?'selected':''}>${escapeHtml(s.name+(s.domain?' · '+s.domain:''))}</option>`).join('')}</select></label><label>Shopping channel<select id="crPortalChannel"><option value="all" ${state.channel==='all'?'selected':''}>All channels</option><option value="online" ${state.channel==='online'?'selected':''}>Online</option><option value="instore" ${state.channel==='instore'?'selected':''}>In-store</option></select></label></div>`;
+    const store=result.stores.find(x=>x.id===state.selected);
+    if(store){
+     const rates=store.rates.filter(r=>state.channel==='all'||r.channel===state.channel).sort((a,b)=>(a.type===b.type?b.value-a.value:a.type==='percent'?-1:1)||crAlpha(a.portal,b.portal));
+     const primary=['Rakuten','TopCashback'].map(name=>{const matches=rates.filter(r=>r.portal===name);return matches.length?matches.map(crPortalOfferRow).join(''):crPortalMissing(name);}).join('');
+     const other=rates.filter(r=>!['Rakuten','TopCashback'].includes(r.portal));
+     html+=`<p class="cr-portal-store"><strong>${escapeHtml(store.name)}</strong> · ${crPortalLink(store.source,'Source: GotCashback.com')}</p><div class="cr-portal-grid">${primary}</div>${other.length?`<details class="cr-portal-others"><summary>Compare ${other.length} other published ${other.length===1?'offer':'offers'}</summary><div class="cr-portal-grid">${other.map(crPortalOfferRow).join('')}</div></details>`:''}`;
+    }else html+='<p class="acct-meta">Choose the exact merchant to view rates. Related stores are kept separate.</p>';
+   }else html+='<p class="acct-meta">No matching US merchant was returned. Try its full store name. A missing result does not mean that the portals have no offers.</p>';
+  }
+ }
+ html+='<details class="cr-portal-about"><summary>Source, privacy & stacking</summary><p>Rates are supplied by GotCashback.com, an independent comparison service. Only the search text is sent; ledger records and balances are not sent. Results stay in memory for this browser tab and refresh after five minutes while you are viewing them.</p><p>Exclusions and category-specific terms must be confirmed on the portal. Retrieval time is not the portal’s rate-publication time. No portal rewards are added to your calculator or ledger in this stage.</p><p>Offer links pass through GotCashback.com and may earn it referral credit. Select one online portal before beginning your shopping trip.</p>'+crPortalLink('https://www.gotcashback.com/','About the comparison source')+'</details>';
+ host.innerHTML=html;
+ $('crPortalRefresh').onclick=()=>crPortalLookup(state.query,true);
+ if($('crPortalMerchant'))$('crPortalMerchant').onchange=e=>{state.selected=e.target.value;crPortalRender();};
+ if($('crPortalChannel'))$('crPortalChannel').onchange=e=>{state.channel=e.target.value;crPortalRender();};
+}
+function crPortalActive(){return $('crPortalComparison')&&$('view-card-rewards')?.classList.contains('active')&&crRewardsTab==='offers'&&document.visibilityState!=='hidden';}
+function crPortalSearchChanged(){
+ if(!crPortalActive())return;const q=String(crSearchQuery||'').trim().slice(0,100),key=crPortalKey(q),state=crPortalState;
+ if(q.length<3||!key){clearTimeout(state.timer);if(state.key!==key){state.serial++;state.controller?.abort();}Object.assign(state,{query:q,key,phase:'idle',result:null,error:'',selected:''});crPortalRender();return;}
+ if(key===state.key&&['loading','waiting'].includes(state.phase))return;
+ clearTimeout(state.timer);const cached=state.cache.get(key);
+ if(key===state.key&&state.result&&Date.now()-state.result.fetchedAt<crPortalTTL&&!state.error)return;
+ if((state.failures.get(key)||0)>Date.now()){if(key!==state.key){state.query=q;state.key=key;state.result=cached||null;state.selected=cached?crPortalChoose(cached):'';state.error='The rate source is temporarily unavailable. Please retry shortly.';state.phase='error';}crPortalRender();return;}
+ if(key!==state.key){state.serial++;state.controller?.abort();state.query=q;state.key=key;state.result=cached||null;state.selected=cached?crPortalChoose(cached):'';state.error='';}
+ if(cached&&Date.now()-cached.fetchedAt<crPortalTTL){state.result=cached;state.selected=crPortalChoose(cached,state.selected);state.phase='ready';crPortalRender();return;}
+ state.phase='waiting';state.query=q;crPortalRender();state.timer=setTimeout(()=>{state.timer=null;if(crPortalActive())crPortalLookup(q,false);else state.phase=state.result?'ready':'idle';},750);
+}
+async function crPortalLookup(query,force=false){
+ const state=crPortalState,q=String(query||'').trim().slice(0,100),key=crPortalKey(q);if(q.length<3||!key)return;
+ if((state.failures.get(key)||0)>Date.now()){state.error='The rate source is temporarily unavailable. Please retry shortly.';crPortalRender();return;}
+ if(state.phase==='loading'&&state.key===key)return;
+ const cached=state.cache.get(key);if(!force&&cached&&Date.now()-cached.fetchedAt<crPortalTTL){state.query=q;state.key=key;state.result=cached;state.selected=crPortalChoose(cached,state.selected);state.phase='ready';state.error='';crPortalRender();return;}
+ clearTimeout(state.timer);state.controller?.abort();const serial=++state.serial,controller=new AbortController();state.controller=controller;state.key=key;state.query=q;state.phase='loading';state.error='';if(state.result&&crPortalKey(state.result.query)!==key)state.result=null;crPortalRender();const timeout=setTimeout(()=>controller.abort(),15000);
+ try{
+  const response=await fetch(crPortalAPI+encodeURIComponent(q)+'?country_code=us',{method:'GET',headers:{Accept:'application/json'},credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal});
+  if(!response.ok){if(response.status===429){const retry=response.headers.get('Retry-After')||'',seconds=Number(retry),deadline=Number.isFinite(seconds)&&seconds>0?Date.now()+seconds*1000:Date.parse(retry);state.failures.set(key,Math.max(Date.now()+60000,Number.isFinite(deadline)?deadline:0));}throw Error(response.status===429?'The provider rate limit was reached. Please retry later.':'The public rate source is unavailable ('+response.status+').');}
+  const text=await response.text();if(text.length>600000)throw Error('The rate source returned too much data. Try a more specific merchant name.');let payload;try{payload=JSON.parse(text);}catch{throw Error('The rate source returned unreadable data. Please retry later.');}const stores=crPortalNormalize(payload,q),result={query:q,stores,fetchedAt:Date.now()};
+  state.cache.delete(key);state.cache.set(key,result);while(state.cache.size>12)state.cache.delete(state.cache.keys().next().value);state.failures.delete(key);
+  if(serial!==state.serial)return;state.result=result;state.selected=crPortalChoose(result,state.selected);state.phase='ready';state.error='';crPortalRender();
+ }catch(error){if(serial!==state.serial)return;state.error=error?.name==='AbortError'?'The rate request timed out. Try again shortly.':String(error?.message||'Could not retrieve public cashback rates.');state.phase='error';state.failures.set(key,Math.max(state.failures.get(key)||0,Date.now()+60000));crPortalRender();}
+ finally{clearTimeout(timeout);if(serial===state.serial)state.controller=null;}
+}
+function crPortalMount(){const root=$('view-card-rewards');if(!root)return;let panel=$('crPortalComparison');if(!panel){const holder=document.createElement('div');holder.innerHTML=card('Shopping portal cashback','<div id="crPortalBody" aria-live="polite"></div>');panel=holder.firstElementChild;panel.id='crPortalComparison';panel.dataset.crSubview='offers';panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby','crSubtab-offers');const merchant=root.querySelector('.cr-merchants-section');if(merchant)merchant.after(panel);else root.appendChild(panel);}const tab=$('crSubtab-offers');if(tab){const ids=new Set((tab.getAttribute('aria-controls')||'').split(' ').filter(Boolean));ids.add(panel.id);tab.setAttribute('aria-controls',[...ids].join(' '));}crPortalRender();crApplyRewardsTab();if(!crPortalState.interval)crPortalState.interval=setInterval(()=>{if(crPortalActive())crPortalSearchChanged();},60000);}
+const crBeforePortalSearch=crApplySearch;
+crApplySearch=function(){crBeforePortalSearch();crPortalSearchChanged();};
+const crBeforePortalTab=crApplyRewardsTab;
+crApplyRewardsTab=function(){crBeforePortalTab();if(crRewardsTab==='offers'){const root=$('view-card-rewards'),status=$('crSearchStatus');if(root&&status){const groups=root.querySelectorAll('.cr-merchant-group').length,count=root.querySelectorAll('.cr-merchant-group .cr-compact-offer').length;status.textContent=String(crSearchQuery||'').trim()||crMerchantFilter!=='all'?count+' targeted card '+(count===1?'offer':'offers')+' across '+groups+' '+(groups===1?'merchant':'merchants'):'';}}crPortalSearchChanged();};
+const crBeforePortalRender=crRender;
+crRender=function(){crBeforePortalRender();crPortalMount();};
+
+const crBeforePortalPage=page;
+page=function(name){const result=crBeforePortalPage(name);if(name==='card-rewards')crPortalSearchChanged();else if(crPortalState.phase==='waiting'){clearTimeout(crPortalState.timer);crPortalState.phase=crPortalState.result?'ready':'idle';}return result;};
 
 window.__ledgerStart = () => { init(); setupUpgrade(); };
 window.__ledgerStore = store;
